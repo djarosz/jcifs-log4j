@@ -20,9 +20,14 @@ package jcifs.smb;
 
 import java.util.Date;
 import java.io.UnsupportedEncodingException;
+
+import org.apache.log4j.Logger;
+
 import jcifs.util.Hexdump;
 
 class SmbComNegotiateResponse extends ServerMessageBlock {
+
+    private static final Logger LOGGER = Logger.getLogger(SmbComNegotiateResponse.class);
 
     int dialectIndex;
     SmbTransport.ServerData server;
@@ -96,8 +101,7 @@ class SmbComNegotiateResponse extends ServerMessageBlock {
                                 len, ServerMessageBlock.OEM_ENCODING );
                     }
                 } catch( UnsupportedEncodingException uee ) {
-                    if( log.level > 1 )
-                        uee.printStackTrace( log );
+                	LOGGER.warn("", uee);
                 }
                 bufferIndex += len;
             } else {

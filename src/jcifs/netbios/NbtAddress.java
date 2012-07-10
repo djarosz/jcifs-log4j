@@ -20,9 +20,6 @@ package jcifs.netbios;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.net.SocketException;
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.util.HashMap;
 import jcifs.Config;
 import jcifs.util.Hexdump;

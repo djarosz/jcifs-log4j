@@ -18,8 +18,6 @@
 
 package jcifs.smb;
 
-import java.util.Date;
-
 class Trans2GetDfsReferralResponse extends SmbComTransactionResponse {
 
     class Referral {

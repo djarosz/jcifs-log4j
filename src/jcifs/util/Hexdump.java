@@ -19,8 +19,7 @@
 
 package jcifs.util;
 
-import java.io.OutputStream;
-import java.io.PrintStream;
+import org.apache.log4j.Logger;
 
 /**
  */
@@ -54,7 +53,11 @@ public class Hexdump {
  * </blockquote></pre>
  */
 
-    public static void hexdump( PrintStream ps, byte[] src, int srcIndex, int length ) {
+    public static void hexdump( Logger logger, byte[] src, int srcIndex, int length ) {
+    	if (!logger.isDebugEnabled()) {
+    		return;
+    	}
+    	
         if( length == 0 ) {
             return;
         }
@@ -99,7 +102,7 @@ public class Hexdump {
             ci += NL_LENGTH;
         } while( si < length );
 
-        ps.println( c );
+        logger.debug( c );
     }
 
 /** 

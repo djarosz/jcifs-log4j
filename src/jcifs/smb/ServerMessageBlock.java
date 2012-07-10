@@ -18,20 +18,17 @@
 
 package jcifs.smb;
 
-import jcifs.Config;
-import java.io.InputStream;
-import java.io.PushbackInputStream;
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.util.Calendar;
 import java.util.Date;
+
+import org.apache.log4j.Logger;
+
 import jcifs.util.Hexdump;
-import jcifs.util.LogStream;
 import jcifs.util.transport.*;
 
 abstract class ServerMessageBlock extends Response implements Request, SmbConstants {
 
-    static LogStream log = LogStream.getInstance();
+    private static final Logger LOGGER = Logger.getLogger(ServerMessageBlock.class);
 
     static final byte[] header = {
         (byte)0xFF, (byte)'S', (byte)'M', (byte)'B',
@@ -222,8 +219,7 @@ abstract class ServerMessageBlock extends Response implements Request, SmbConsta
                 dst[dstIndex++] = (byte)'\0';
             }
         } catch( UnsupportedEncodingException uee ) {
-            if( log.level > 1 )
-                uee.printStackTrace( log );
+                LOGGER.warn("", uee);
         }
 
         return dstIndex - start;
@@ -244,8 +240,7 @@ abstract class ServerMessageBlock extends Response implements Request, SmbConsta
                                             src[srcIndex + len + 1] != (byte)0x00 ) {
                     len += 2;
                     if( len > maxLen ) {
-if( log.level > 0 )
-Hexdump.hexdump( System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128 );
+                    	Hexdump.hexdump( LOGGER, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128 );
                         throw new RuntimeException( "zero termination not found" );
                     }
                 }
@@ -254,16 +249,14 @@ Hexdump.hexdump( System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128 );
                 while( src[srcIndex + len] != (byte)0x00 ) {
                     len++;
                     if( len > maxLen ) {
-if( log.level > 0 )
-Hexdump.hexdump( System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128 );
+                    	Hexdump.hexdump( LOGGER, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128 );
                         throw new RuntimeException( "zero termination not found" );
                     }
                 }
                 str = new String( src, srcIndex, len, OEM_ENCODING );
             }
         } catch( UnsupportedEncodingException uee ) {
-            if( log.level > 1 )
-                uee.printStackTrace( log );
+                LOGGER.warn("", uee);
         }
         return str;
     }
@@ -281,8 +274,7 @@ Hexdump.hexdump( System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128 );
                         break;
                     }
                     if (len > maxLen) {
-                        if (log.level > 0)
-                            Hexdump.hexdump(System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128);
+                    	Hexdump.hexdump(LOGGER, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128);
                         throw new RuntimeException("zero termination not found");
                     }
                 }
@@ -293,16 +285,14 @@ Hexdump.hexdump( System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128 );
                         break;
                     }
                     if (len > maxLen) {
-                        if (log.level > 0)
-                            Hexdump.hexdump(System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128);
+                    	Hexdump.hexdump(LOGGER, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128);
                         throw new RuntimeException("zero termination not found");
                     }
                 }
                 str = new String(src, srcIndex, len, OEM_ENCODING);
             }
         } catch( UnsupportedEncodingException uee ) {
-            if( log.level > 1 )
-                uee.printStackTrace( log );
+                LOGGER.warn("", uee);
         }
         return str;
     }
@@ -353,10 +343,7 @@ Hexdump.hexdump( System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128 );
         if( wordCount != 0 ) {
             int n;
             if(( n = readParameterWordsWireFormat( buffer, bufferIndex )) != wordCount * 2 ) {
-                if( log.level >= 5 ) {
-                    log.println( "wordCount * 2=" + ( wordCount * 2 ) +
-                            " but readParameterWordsWireFormat returned " + n );
-                }
+            	LOGGER.debug( "wordCount * 2=" + ( wordCount * 2 ) + " but readParameterWordsWireFormat returned " + n );
             }
             bufferIndex += wordCount * 2;
         }
@@ -367,10 +354,7 @@ Hexdump.hexdump( System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128 );
         if( byteCount != 0 ) {
             int n;
             if(( n = readBytesWireFormat( buffer, bufferIndex )) != byteCount ) {
-                if( log.level >= 5 ) {
-                    log.println( "byteCount=" + byteCount +
-                            " but readBytesWireFormat returned " + n );
-                }
+            	LOGGER.debug( "byteCount=" + byteCount + " but readBytesWireFormat returned " + n );
             }
             // Don't think we can rely on n being correct here. Must use byteCount.
             // Last paragraph of section 3.13.3 eludes to this.

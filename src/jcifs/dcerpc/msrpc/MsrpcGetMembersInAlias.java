@@ -18,9 +18,6 @@
 
 package jcifs.dcerpc.msrpc;
 
-import jcifs.smb.*;
-import jcifs.dcerpc.*;
-
 public class MsrpcGetMembersInAlias extends samr.SamrGetMembersInAlias {
 
     public MsrpcGetMembersInAlias(SamrAliasHandle aliasHandle, lsarpc.LsarSidArray sids) {

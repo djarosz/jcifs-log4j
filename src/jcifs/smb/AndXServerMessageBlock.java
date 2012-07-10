@@ -18,8 +18,6 @@
 
 package jcifs.smb;
 
-import java.io.InputStream;
-import java.io.IOException;
 import jcifs.util.Hexdump;
 
 abstract class AndXServerMessageBlock extends ServerMessageBlock {

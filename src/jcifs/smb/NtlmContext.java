@@ -18,10 +18,9 @@
 
 package jcifs.smb;
 
-import java.io.IOException;
-import java.security.*;
+import org.apache.log4j.Logger;
+
 import jcifs.ntlmssp.*;
-import jcifs.util.LogStream;
 import jcifs.util.Hexdump;
 import jcifs.util.Encdec;
 
@@ -31,6 +30,7 @@ For initiating NTLM authentication (including NTLMv2). If you want to add NTLMv2
 
 public class NtlmContext {
 
+    private static final Logger LOGGER = Logger.getLogger(NtlmContext.class);
 
     NtlmPasswordAuthentication auth;
     int ntlmsspFlags;
@@ -40,7 +40,6 @@ public class NtlmContext {
     byte[] signingKey = null;
     String netbiosName = null;
     int state = 1;
-    LogStream log;
 
     public NtlmContext(NtlmPasswordAuthentication auth, boolean doSigning) {
         this.auth = auth;
@@ -54,7 +53,6 @@ public class NtlmContext {
                 NtlmFlags.NTLMSSP_NEGOTIATE_KEY_EXCH;
         }
         this.workstation = Type1Message.getDefaultWorkstation();
-        log = LogStream.getInstance();
     }
 
     public String toString() {
@@ -123,11 +121,8 @@ public class NtlmContext {
                 Type1Message msg1 = new Type1Message(ntlmsspFlags, auth.getDomain(), workstation);
                 token = msg1.toByteArray();
 
-                if (log.level >= 4) {
-                    log.println(msg1);
-                    if (log.level >= 6)
-                        Hexdump.hexdump(log, token, 0, token.length);
-                }
+                LOGGER.debug(msg1);
+                Hexdump.hexdump(LOGGER, token, 0, token.length);
 
                 state++;
                 break;
@@ -135,11 +130,8 @@ public class NtlmContext {
                 try {
                     Type2Message msg2 = new Type2Message(token);
 
-                    if (log.level >= 4) {
-                        log.println(msg2);
-                        if (log.level >= 6)
-                            Hexdump.hexdump(log, token, 0, token.length);
-                    }
+                    LOGGER.debug(msg2);
+                    Hexdump.hexdump(LOGGER, token, 0, token.length);
 
                     serverChallenge = msg2.getChallenge();
                     ntlmsspFlags &= msg2.getFlags();
@@ -154,11 +146,8 @@ public class NtlmContext {
                                 ntlmsspFlags);
                     token = msg3.toByteArray();
 
-                    if (log.level >= 4) {
-                        log.println(msg3);
-                        if (log.level >= 6)
-                            Hexdump.hexdump(log, token, 0, token.length);
-                    }
+                    LOGGER.debug(msg3);
+                    Hexdump.hexdump(LOGGER, token, 0, token.length);
 
                     if ((ntlmsspFlags & NtlmFlags.NTLMSSP_NEGOTIATE_SIGN) != 0)
                         signingKey = msg3.getMasterKey();

@@ -18,12 +18,13 @@
 
 package jcifs.smb;
 
-import java.net.URL;
 import java.io.OutputStream;
 import java.io.IOException;
 import java.net.UnknownHostException;
 import java.net.MalformedURLException;
-import jcifs.util.LogStream;
+
+import org.apache.log4j.Logger;
+
 
 /**
  * This <code>OutputStream</code> can write bytes to a file on an SMB file server.
@@ -31,6 +32,8 @@ import jcifs.util.LogStream;
 
 public class SmbFileOutputStream extends OutputStream {
 
+	private static final Logger LOGGER = Logger.getLogger(SmbFileOutputStream.class);
+	
     private SmbFile file;
     private boolean append, useNTSmbs;
     private int openFlags, access, writeSize;
@@ -228,8 +231,7 @@ write, and/or delete the file while the jCIFS user has the file open.
         }
         ensureOpen();
 
-        if( file.log.level >= 4 )
-            file.log.println( "write: fid=" + file.fid + ",off=" + off + ",len=" + len );
+        LOGGER.debug( "write: fid=" + file.fid + ",off=" + off + ",len=" + len );
 
         int w;
         do {

@@ -19,7 +19,6 @@
 package jcifs.smb;
 
 import jcifs.Config;
-import jcifs.util.*;
 
 class SmbComWriteAndX extends AndXServerMessageBlock {
 

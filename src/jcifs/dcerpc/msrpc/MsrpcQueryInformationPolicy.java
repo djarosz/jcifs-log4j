@@ -18,8 +18,6 @@
 
 package jcifs.dcerpc.msrpc;
 
-import jcifs.smb.*;
-import jcifs.dcerpc.*;
 import jcifs.dcerpc.ndr.*;
 
 public class MsrpcQueryInformationPolicy extends lsarpc.LsarQueryInformationPolicy {

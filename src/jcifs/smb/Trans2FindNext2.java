@@ -18,7 +18,6 @@
 
 package jcifs.smb;
 
-import jcifs.Config;
 import jcifs.util.Hexdump;
 
 class Trans2FindNext2 extends SmbComTransaction {

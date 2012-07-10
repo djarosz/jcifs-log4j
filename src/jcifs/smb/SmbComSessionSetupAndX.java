@@ -18,7 +18,6 @@
 
 package jcifs.smb;
 
-import java.util.Arrays;
 import jcifs.Config;
 
 class SmbComSessionSetupAndX extends AndXServerMessageBlock {

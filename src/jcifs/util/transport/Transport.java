@@ -1,9 +1,9 @@
 package jcifs.util.transport;
 
 import java.io.*;
-import java.net.*;
 import java.util.*;
-import jcifs.util.LogStream;
+
+import org.apache.log4j.Logger;
 
 /**
  * This class simplifies communication for protocols that support
@@ -16,8 +16,8 @@ import jcifs.util.LogStream;
 
 public abstract class Transport implements Runnable {
 
+    private static final Logger LOGGER = Logger.getLogger(Transport.class);
     static int id = 0;
-    static LogStream log = LogStream.getInstance();
 
     public static int readn( InputStream in,
                 byte[] b,
@@ -76,12 +76,12 @@ public abstract class Transport implements Runnable {
                     }
                 }
             } catch( IOException ioe ) {
-                if (log.level > 2)
-                    ioe.printStackTrace( log );
+            	LOGGER.warn("IO ERROR", ioe);
+            	
                 try {
                     disconnect( true );
                 } catch( IOException ioe2 ) {
-                    ioe2.printStackTrace( log );
+                	LOGGER.warn("IO ERROR while disconnecting", ioe);
                 }
                 throw ioe;
             } catch( InterruptedException ie ) {
@@ -99,8 +99,7 @@ public abstract class Transport implements Runnable {
                 synchronized (this) {
                     Response response = (Response)response_map.get( key );
                     if (response == null) {
-                        if (log.level >= 4)
-                            log.println( "Invalid key, skipping message" );
+                    	LOGGER.debug( "Invalid key, skipping message" );
                         doSkip();
                     } else {
                         doRecv( response );
@@ -115,13 +114,14 @@ public abstract class Transport implements Runnable {
                  */
                 boolean hard = timeout == false;
 
-                if (!timeout && log.level >= 3)
-                    ex.printStackTrace( log );
+                if (!timeout) {
+                	LOGGER.debug("Not a time exception", ex);
+                }
 
                 try {
                     disconnect( hard );
                 } catch( IOException ioe ) {
-                    ioe.printStackTrace( log );
+                    LOGGER.warn("Error while disconnecting", ioe);
                 }
             }
         }
@@ -190,8 +190,7 @@ public abstract class Transport implements Runnable {
             /* This guarantees that we leave in a valid state
              */
             if (state != 0 && state != 3 && state != 4) {
-                if (log.level >= 1)
-                    log.println("Invalid state: " + state);
+            	LOGGER.info("Invalid state: " + state);
                 state = 0;
                 thread = null;
             }
@@ -219,8 +218,7 @@ public abstract class Transport implements Runnable {
                 state = 0;
                 break;
             default:
-                if (log.level >= 1)
-                    log.println("Invalid state: " + state);
+            	LOGGER.info("Invalid state: " + state);
                 thread = null;
                 state = 0;
                 break;
@@ -249,8 +247,7 @@ public abstract class Transport implements Runnable {
                      * doConnect returned too late, just ignore.
                      */
                     if (ex0 != null) {
-                        if (log.level >= 2)
-                            ex0.printStackTrace(log);
+                    	LOGGER.info("There was an exception ", ex0);
                     }
                     return;
                 }

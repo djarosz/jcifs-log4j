@@ -22,11 +22,15 @@ import java.net.*;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.StringTokenizer;
+
+import org.apache.log4j.Logger;
+
 import jcifs.Config;
 import jcifs.util.Hexdump;
-import jcifs.util.LogStream;
 
 class NameServiceClient implements Runnable {
+	
+	private static final Logger LOGGER = Logger.getLogger(NameServiceClient.class);
 
     static final int DEFAULT_SO_TIMEOUT = 5000;
     static final int DEFAULT_RCV_BUF_SIZE = 576;
@@ -47,8 +51,6 @@ class NameServiceClient implements Runnable {
     private static final int LPORT = Config.getInt( "jcifs.netbios.lport", 0 );
     private static final InetAddress LADDR = Config.getInetAddress( "jcifs.netbios.laddr", null );
     private static final String RO = Config.getProperty( "jcifs.resolveOrder" );
-
-    private static LogStream log = LogStream.getInstance();
 
     private final Object LOCK = new Object();
 
@@ -109,10 +111,8 @@ class NameServiceClient implements Runnable {
                     tmp[i++] = RESOLVER_LMHOSTS;
                 } else if( s.equalsIgnoreCase( "WINS" )) {
                     if( NbtAddress.getWINSAddress() == null ) {
-                        if( log.level > 1 ) {
-                            log.println( "NetBIOS resolveOrder specifies WINS however the " +
-                                    "jcifs.netbios.wins property has not been set" );
-                        }
+                    	LOGGER.info( "NetBIOS resolveOrder specifies WINS however the " +
+                    			"jcifs.netbios.wins property has not been set" );
                         continue;
                     }
                     tmp[i++] = RESOLVER_WINS;
@@ -120,8 +120,8 @@ class NameServiceClient implements Runnable {
                     tmp[i++] = RESOLVER_BCAST;
                 } else if( s.equalsIgnoreCase( "DNS" )) {
                     ; // skip
-                } else if( log.level > 1 ) {
-                    log.println( "unknown resolver method: " + s );
+                } else {
+                    LOGGER.warn( "unknown resolver method: " + s );
                 }
             }
             resolveOrder = new int[i];
@@ -179,8 +179,7 @@ class NameServiceClient implements Runnable {
                 socket.setSoTimeout( closeTimeout );
                 socket.receive( in );
 
-                if( log.level > 3 )
-                    log.println( "NetBIOS: new data read from socket" );
+                LOGGER.debug( "NetBIOS: new data read from socket" );
 
                 nameTrnId = NameServicePacket.readNameTrnId( rcv_buf, 0 );
                 response = (NameServicePacket)responseTable.get( new Integer( nameTrnId ));
@@ -191,18 +190,15 @@ class NameServiceClient implements Runnable {
                     response.readWireFormat( rcv_buf, 0 );
                     response.received = true;
 
-                    if( log.level > 3 ) {
-                        log.println( response );
-                        Hexdump.hexdump( log, rcv_buf, 0, in.getLength() );
-                    }
+                    LOGGER.debug( response );
+                    Hexdump.hexdump( LOGGER, rcv_buf, 0, in.getLength() );
 
                     response.notify();
                 }
             }
         } catch(SocketTimeoutException ste) {
         } catch( Exception ex ) {
-            if( log.level > 2 )
-                ex.printStackTrace( log );
+            LOGGER.warn("", ex);
         } finally {
             tryClose();
         }
@@ -230,10 +226,8 @@ class NameServiceClient implements Runnable {
                         ensureOpen( timeout + 1000 );
                         socket.send( out );
 
-                        if( log.level > 3 ) {
-                            log.println( request );
-                            Hexdump.hexdump( log, snd_buf, 0, out.getLength() );
-                        }
+                        LOGGER.debug( request );
+                        Hexdump.hexdump( LOGGER, snd_buf, 0, out.getLength() );
                     }
 
                     long start = System.currentTimeMillis();
@@ -294,8 +288,7 @@ class NameServiceClient implements Runnable {
             try {
                 send( request, response, RETRY_TIMEOUT );
             } catch( IOException ioe ) {
-                if( log.level > 1 )
-                    ioe.printStackTrace( log );
+            	LOGGER.error("", ioe);
                 throw new UnknownHostException( name.name );
             }
 
@@ -323,8 +316,7 @@ class NameServiceClient implements Runnable {
                 try {
                     send( request, response, RETRY_TIMEOUT );
                 } catch( IOException ioe ) {
-                    if( log.level > 1 )
-                        ioe.printStackTrace( log );
+                	LOGGER.error("", ioe);
                     throw new UnknownHostException( name.name );
                 }
 
@@ -370,8 +362,7 @@ class NameServiceClient implements Runnable {
                             try {
                                 send( request, response, RETRY_TIMEOUT );
                             } catch( IOException ioe ) {
-                                if( log.level > 1 )
-                                    ioe.printStackTrace( log );
+                                LOGGER.error("", ioe);
                                 throw new UnknownHostException( name.name );
                             }
                             if( response.received && response.resultCode == 0 ) {
@@ -412,8 +403,7 @@ class NameServiceClient implements Runnable {
             try {
                 send( request, response, RETRY_TIMEOUT );
             } catch( IOException ioe ) {
-                if( log.level > 1 )
-                    ioe.printStackTrace( log );
+            	LOGGER.warn("", ioe);
                 throw new UnknownHostException( addr.toString() );
             }
             if( response.received && response.resultCode == 0 ) {

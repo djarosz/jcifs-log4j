@@ -31,9 +31,6 @@ import jcifs.netbios.NbtAddress;
 
 import jcifs.smb.NtlmPasswordAuthentication;
 import jcifs.util.HMACT64;
-import javax.crypto.Cipher;
-import javax.crypto.spec.SecretKeySpec;
-import java.security.GeneralSecurityException;
 import jcifs.util.MD4;
 import jcifs.util.RC4;
 

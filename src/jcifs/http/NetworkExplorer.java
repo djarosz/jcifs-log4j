@@ -21,16 +21,16 @@ package jcifs.http;
 import java.io.*;
 import javax.servlet.*;
 import javax.servlet.http.*;
+
+import org.apache.log4j.Logger;
+
 import java.util.*;
 import java.text.SimpleDateFormat;
-import java.net.UnknownHostException;
 import jcifs.*;
-import jcifs.http.*;
 import jcifs.smb.*;
 import jcifs.netbios.NbtAddress;
 import jcifs.util.MimeMap;
 import jcifs.util.Base64;
-import jcifs.util.LogStream;
 
 /**
  * This servlet may be used to "browse" the entire hierarchy of resources
@@ -41,7 +41,7 @@ import jcifs.util.LogStream;
 
 public class NetworkExplorer extends HttpServlet {
 
-    private static LogStream log = LogStream.getInstance();
+    private static final Logger LOGGER = Logger.getLogger(NetworkExplorer.class);
 
     private MimeMap mimeMap;
     private String style;
@@ -93,14 +93,10 @@ public class NetworkExplorer extends HttpServlet {
         defaultDomain = Config.getProperty("jcifs.smb.client.domain");
 
         if(( level = Config.getInt( "jcifs.util.loglevel", -1 )) != -1 ) {
-            LogStream.setLevel( level );
+        	LOGGER.warn("Ignoring jcifs.util.loglevel setting. Using log4j configuration");
         }
-        if( log.level > 2 ) {
-            try {
-                Config.store( log, "JCIFS PROPERTIES" );
-            } catch( IOException ioe ) {
-            }
-        }
+        
+        Config.list(LOGGER);
     }
 
     protected void doFile( HttpServletRequest req,
@@ -195,8 +191,9 @@ public class NetworkExplorer extends HttpServlet {
         sdf.setCalendar( cal );
 
         dirents = dir.listFiles();
-        if( log.level > 2 )
-            log.println( dirents.length + " items listed" );
+        
+        LOGGER.debug( dirents.length + " items listed" );
+        
         sorted = new LinkedList();
         if(( fmt = req.getParameter( "fmt" )) == null ) {
             fmt = "col";
@@ -219,11 +216,10 @@ public class NetworkExplorer extends HttpServlet {
                     continue;
                 }
             } catch( SmbAuthException sae ) {
-                if( log.level > 2 )
-                    sae.printStackTrace( log );
+            	LOGGER.warn("Exception", sae);
             } catch( SmbException se ) {
-                if( log.level > 2 )
-                    se.printStackTrace( log );
+            	LOGGER.warn("Exception", se);
+            	
                 if( se.getNtStatus() != se.NT_STATUS_UNSUCCESSFUL ) {
                     throw se;
                 }
@@ -235,8 +231,9 @@ public class NetworkExplorer extends HttpServlet {
             }
 
             name = dirents[i].getName();
-            if( log.level > 3 )
-                log.println( i + ": " + name );
+            
+            LOGGER.debug( i + ": " + name );
+            
             len = name.length(); 
             if( len > maxLen ) {
                 maxLen = len;

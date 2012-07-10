@@ -23,18 +23,19 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 
+import org.apache.log4j.Logger;
+
 import jcifs.*;
 import jcifs.netbios.*;
 import jcifs.util.*;
 import jcifs.util.transport.*;
-import jcifs.dcerpc.*;
-import jcifs.dcerpc.msrpc.*;
 
 public class SmbTransport extends Transport implements SmbConstants {
+	
+	private static final Logger LOGGER = Logger.getLogger(SmbTransport.class);
 
     static final byte[] BUF = new byte[0xFFFF];
     static final SmbComNegotiate NEGOTIATE_REQUEST = new SmbComNegotiate();
-    static LogStream log = LogStream.getInstance();
     static HashMap dfsRoots = null;
 
     static synchronized SmbTransport getSmbTransport( UniAddress address, int port ) {
@@ -211,8 +212,7 @@ public class SmbTransport extends Transport implements SmbConstants {
             }
             switch( sbuf[0] & 0xFF ) {
                 case SessionServicePacket.POSITIVE_SESSION_RESPONSE:
-                    if( log.level >= 4 )
-                        log.println( "session established ok with " + address );
+                	LOGGER.debug( "session established ok with " + address );
                     return;
                 case SessionServicePacket.NEGATIVE_SESSION_RESPONSE:
                     int errorCode = (int)( in.read() & 0xFF );
@@ -273,12 +273,8 @@ public class SmbTransport extends Transport implements SmbConstants {
             int n = NEGOTIATE_REQUEST.encode( sbuf, 4 );
             Encdec.enc_uint32be( n & 0xFFFF, sbuf, 0 ); /* 4 byte ssn msg header */
 
-            if (log.level >= 4) {
-                log.println( NEGOTIATE_REQUEST );
-                if (log.level >= 6) {
-                    Hexdump.hexdump( log, sbuf, 4, n );
-                }
-            }
+            LOGGER.debug( NEGOTIATE_REQUEST );
+            Hexdump.hexdump( LOGGER, sbuf, 4, n );
 
             out.write( sbuf, 0, 4 + n );
             out.flush();
@@ -294,12 +290,8 @@ public class SmbTransport extends Transport implements SmbConstants {
             readn( in, sbuf, 4 + 32, size - 32 );
             resp.decode( sbuf, 4 );
 
-            if (log.level >= 4) {
-                log.println( resp );
-                if (log.level >= 6) {
-                    Hexdump.hexdump( log, sbuf, 4, n );
-                }
-            }
+            LOGGER.debug( resp );
+            Hexdump.hexdump( LOGGER, sbuf, 4, n );
         }
     }
     public void connect() throws SmbException {
@@ -391,10 +383,9 @@ public class SmbTransport extends Transport implements SmbConstants {
                                                    /* read smb header */
         if ((n = readn( in, sbuf, 4, 32 )) < 32)
             return null;
-        if (log.level >= 4) {
-            log.println( "New data read: " + this );
-            jcifs.util.Hexdump.hexdump( log, sbuf, 4, 32 );
-        }
+        
+        LOGGER.debug( "New data read: " + this );
+        Hexdump.hexdump( LOGGER, sbuf, 4, 32 );
 
         for ( ;; ) {
             /* 01234567
@@ -438,15 +429,15 @@ public class SmbTransport extends Transport implements SmbConstants {
             ServerMessageBlock smb = (ServerMessageBlock)request;
             int n = smb.encode( BUF, 4 );
             Encdec.enc_uint32be( n & 0xFFFF, BUF, 0 ); /* 4 byte session message header */
-            if (log.level >= 4) {
-                do {
-                    log.println( smb );
-                } while (smb instanceof AndXServerMessageBlock &&
-                        (smb = ((AndXServerMessageBlock)smb).andx) != null);
-                if (log.level >= 6) {
-                    Hexdump.hexdump( log, BUF, 4, n );
-                }
+            
+            if (LOGGER.isDebugEnabled()) {
+            	do {
+            		LOGGER.debug( smb );
+            	} while (smb instanceof AndXServerMessageBlock &&
+            			(smb = ((AndXServerMessageBlock)smb).andx) != null);
+            	Hexdump.hexdump( LOGGER, BUF, 4, n );
             }
+                
             /* For some reason this can sometimes get broken up into another
              * "NBSS Continuation Message" frame according to WireShark
              */
@@ -457,12 +448,11 @@ public class SmbTransport extends Transport implements SmbConstants {
         try {
             doSend( request );
         } catch( IOException ioe ) {
-            if (log.level > 2)
-                ioe.printStackTrace( log );
+        	LOGGER.warn("", ioe);
             try {
                 disconnect( true );
             } catch( IOException ioe2 ) {
-                ioe2.printStackTrace( log );
+            	LOGGER.warn("", ioe2);
             }
             throw ioe;
         }
@@ -511,12 +501,8 @@ public class SmbTransport extends Transport implements SmbConstants {
                 digest.verify( BUF, 4, resp );
             }
 
-            if (log.level >= 4) {
-                log.println( response );
-                if (log.level >= 6) {
-                    Hexdump.hexdump( log, BUF, 4, size );
-                }
-            }
+            LOGGER.debug( response );
+            Hexdump.hexdump( LOGGER, BUF, 4, size );
         }
     }
     protected void doSkip() throws IOException {

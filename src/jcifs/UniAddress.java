@@ -22,9 +22,11 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.io.IOException;
 import java.util.StringTokenizer;
+
+import org.apache.log4j.Logger;
+
 import jcifs.netbios.NbtAddress;
 import jcifs.netbios.Lmhosts;
-import jcifs.util.LogStream;
 
 /**
  * <p>Under normal conditions it is not necessary to use
@@ -46,6 +48,8 @@ import jcifs.util.LogStream;
  */
 
 public class UniAddress {
+	
+	private static final Logger LOGGER = Logger.getLogger(UniAddress.class);
 
     private static final int RESOLVER_WINS    = 0;
     private static final int RESOLVER_BCAST   = 1;
@@ -54,8 +58,6 @@ public class UniAddress {
 
     private static int[] resolveOrder;
     private static InetAddress baddr;
-
-    private static LogStream log = LogStream.getInstance();
 
     static {
         String ro = Config.getProperty( "jcifs.resolveOrder" );
@@ -97,10 +99,8 @@ public class UniAddress {
                     tmp[i++] = RESOLVER_LMHOSTS;
                 } else if( s.equalsIgnoreCase( "WINS" )) {
                     if( nbns == null ) {
-                        if( log.level > 1 ) {
-                            log.println( "UniAddress resolveOrder specifies WINS however the " +
-                                    "jcifs.netbios.wins property has not been set" );
-                        }
+                    	LOGGER.info( "UniAddress resolveOrder specifies WINS however the " +
+                    			"jcifs.netbios.wins property has not been set" );
                         continue;
                     }
                     tmp[i++] = RESOLVER_WINS;
@@ -108,8 +108,8 @@ public class UniAddress {
                     tmp[i++] = RESOLVER_BCAST;
                 } else if( s.equalsIgnoreCase( "DNS" )) {
                     tmp[i++] = RESOLVER_DNS;
-                } else if( log.level > 1 ) {
-                    log.println( "unknown resolver method: " + s );
+                } else {
+                    LOGGER.warn( "unknown resolver method: " + s );
                 }
             }
             resolveOrder = new int[i];

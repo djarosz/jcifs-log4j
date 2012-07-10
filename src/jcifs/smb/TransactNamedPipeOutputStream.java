@@ -18,7 +18,6 @@
 
 package jcifs.smb;
 
-import java.io.OutputStream;
 import java.io.IOException;
 
 class TransactNamedPipeOutputStream extends SmbFileOutputStream {

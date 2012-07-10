@@ -22,7 +22,6 @@ package jcifs.dcerpc;
 import java.net.*;
 import java.io.*;
 
-import jcifs.dcerpc.ndr.NdrBuffer;
 import jcifs.smb.*;
 import jcifs.util.*;
 

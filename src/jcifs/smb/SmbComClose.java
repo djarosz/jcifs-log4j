@@ -18,8 +18,6 @@
 
 package jcifs.smb;
 
-import java.util.Date;
-
 class SmbComClose extends ServerMessageBlock {
 
     private int fid;

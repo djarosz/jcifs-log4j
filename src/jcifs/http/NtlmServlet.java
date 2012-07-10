@@ -21,13 +21,11 @@ package jcifs.http;
 
 import java.io.IOException;
 
-import java.net.UnknownHostException;
 
 import java.util.Enumeration;
 
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
-import javax.servlet.UnavailableException;
 
 import javax.servlet.http.HttpSession;
 import javax.servlet.http.HttpServlet;

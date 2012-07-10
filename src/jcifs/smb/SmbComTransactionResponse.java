@@ -20,7 +20,11 @@ package jcifs.smb;
 
 import java.util.Enumeration;
 
+import org.apache.log4j.Logger;
+
 abstract class SmbComTransactionResponse extends ServerMessageBlock implements Enumeration {
+	
+	private static final Logger LOGGER = Logger.getLogger(SmbComTransactionResponse.class);
 
     // relative to headerStart
     private static final int SETUP_OFFSET        = 61;
@@ -104,8 +108,7 @@ abstract class SmbComTransactionResponse extends ServerMessageBlock implements E
         setupCount = buffer[bufferIndex] & 0xFF;
         bufferIndex += 2;
         if( setupCount != 0 ) {
-            if( log.level > 2 )
-                log.println( "setupCount is not zero: " + setupCount );
+        	LOGGER.debug( "setupCount is not zero: " + setupCount );
         }
 
         return bufferIndex - start;

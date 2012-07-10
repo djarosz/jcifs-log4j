@@ -21,7 +21,11 @@ package jcifs.smb;
 import java.io.UnsupportedEncodingException;
 import java.util.Date;
 
+import org.apache.log4j.Logger;
+
 class Trans2FindFirst2Response extends SmbComTransactionResponse {
+	
+	private static final Logger LOGGER = Logger.getLogger(Trans2FindFirst2Response.class);
 
     // information levels
 
@@ -126,8 +130,7 @@ class Trans2FindFirst2Response extends SmbComTransactionResponse {
                 str = new String( src, srcIndex, len, ServerMessageBlock.OEM_ENCODING );
             }
         } catch( UnsupportedEncodingException uee ) {
-            if( log.level > 1 )
-                uee.printStackTrace( log );
+                LOGGER.warn("", uee);
         }
         return str;
     }

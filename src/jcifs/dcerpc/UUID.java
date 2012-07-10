@@ -19,8 +19,6 @@
 
 package jcifs.dcerpc;
 
-import jcifs.util.*;
-
 public class UUID extends rpc.uuid_t {
 
     public static int hex_to_bin(char[] arr, int offset, int length) {

@@ -18,12 +18,13 @@
 
 package jcifs.smb;
 
-import java.net.URL;
 import java.net.UnknownHostException;
 import java.net.MalformedURLException;
 import java.io.InputStream;
 import java.io.IOException;
 import java.io.InterruptedIOException;
+
+import org.apache.log4j.Logger;
 
 import jcifs.util.transport.TransportException;
 
@@ -32,6 +33,8 @@ import jcifs.util.transport.TransportException;
  */
 
 public class SmbFileInputStream extends InputStream {
+	
+	private static final Logger LOGGER = Logger.getLogger(SmbFileInputStream.class);
 
     private long fp;
     private int readSize, openFlags, access;
@@ -157,8 +160,7 @@ public class SmbFileInputStream extends InputStream {
          * Read AndX Request / Response
          */
 
-        if( file.log.level >= 4 )
-            file.log.println( "read: fid=" + file.fid + ",off=" + off + ",len=" + len );
+        LOGGER.debug( "read: fid=" + file.fid + ",off=" + off + ",len=" + len );
 
         SmbComReadAndXResponse response = new SmbComReadAndXResponse( b, off );
 
@@ -170,8 +172,7 @@ public class SmbFileInputStream extends InputStream {
         do {
             r = len > readSize ? readSize : len;
 
-            if( file.log.level >= 4 )
-                file.log.println( "read: len=" + len + ",r=" + r + ",fp=" + fp );
+            LOGGER.debug( "read: len=" + len + ",r=" + r + ",fp=" + fp );
 
             try {
 SmbComReadAndX request = new SmbComReadAndX( file.fid, fp, r, null );

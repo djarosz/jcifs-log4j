@@ -19,7 +19,6 @@
 
 package jcifs.dcerpc;
 
-import java.io.IOException;
 import jcifs.dcerpc.ndr.*;
 
 public abstract class DcerpcMessage extends NdrObject implements DcerpcConstants {

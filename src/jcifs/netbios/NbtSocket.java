@@ -23,8 +23,10 @@ import java.net.InetAddress;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.IOException;
+
+import org.apache.log4j.Logger;
+
 import jcifs.Config;
-import jcifs.util.LogStream;
 
 /**
 Do not use this class. Writing to the OutputStream of this type of socket
@@ -33,12 +35,12 @@ write( buf, 4, len ). Calling write( buf, 0, len ) will generate an error.
  */
 
 public class NbtSocket extends Socket {
+	
+	private static final Logger LOGGER = Logger.getLogger(NbtSocket.class);
 
     private static final int SSN_SRVC_PORT = 139;
     private static final int BUFFER_SIZE = 512;
     private static final int DEFAULT_SO_TIMEOUT = 5000;
-
-    private static LogStream log = LogStream.getInstance();
 
     private NbtAddress address;
     private Name calledName;
@@ -112,8 +114,7 @@ public class NbtSocket extends Socket {
 
         switch( type ) {
             case SessionServicePacket.POSITIVE_SESSION_RESPONSE:
-                if( log.level > 2 )
-                    log.println( "session established ok with " + address );
+            	LOGGER.info( "session established ok with " + address );
                 return;
             case SessionServicePacket.NEGATIVE_SESSION_RESPONSE:
                 int errorCode = (int)( in.read() & 0xFF );
@@ -127,8 +128,7 @@ public class NbtSocket extends Socket {
         }
     }
     public void close() throws IOException {
-        if( log.level > 3 )
-            log.println( "close: " + this );
+    	LOGGER.debug( "close: " + this );
         super.close();
     }
 }

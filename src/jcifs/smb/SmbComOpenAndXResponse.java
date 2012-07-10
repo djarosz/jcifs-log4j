@@ -18,9 +18,6 @@
 
 package jcifs.smb;
 
-import java.io.IOException;
-import java.io.InputStream;
-
 class SmbComOpenAndXResponse extends AndXServerMessageBlock {
 
     int fid,

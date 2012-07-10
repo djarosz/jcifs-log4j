@@ -18,8 +18,6 @@
 
 package jcifs.dcerpc.msrpc;
 
-import jcifs.dcerpc.*;
-
 public class MsrpcSamrOpenAlias extends samr.SamrOpenAlias {
 
     public MsrpcSamrOpenAlias(SamrDomainHandle handle,

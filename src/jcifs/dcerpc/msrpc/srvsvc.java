@@ -3,8 +3,6 @@ package jcifs.dcerpc.msrpc;
 import jcifs.dcerpc.*;
 import jcifs.dcerpc.ndr.*;
 
-import jcifs.util.Hexdump;
-
 public class srvsvc {
 
     public static String getSyntax() {

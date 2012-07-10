@@ -24,7 +24,6 @@ import java.net.*;
 import java.security.Principal;
 
 import jcifs.smb.NtlmPasswordAuthentication;
-import jcifs.util.Hexdump;
 import jcifs.dcerpc.ndr.NdrBuffer;
 
 public abstract class DcerpcHandle implements DcerpcConstants {

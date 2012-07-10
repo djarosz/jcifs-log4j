@@ -1,7 +1,6 @@
 package jcifs.dcerpc;
 
 import jcifs.dcerpc.ndr.*;
-import jcifs.util.*;
 
 public class rpc {
 

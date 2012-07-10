@@ -23,7 +23,8 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.StringTokenizer;
-import jcifs.util.LogStream;
+
+import org.apache.log4j.Logger;
 
 /**
  * This class uses a static {@link java.util.Properties} to act
@@ -52,15 +53,13 @@ public static int socketCount = 0;
      */
 
     private static Properties prp = new Properties();
-    private static LogStream log;
+    private static final Logger LOGGER = Logger.getLogger(Config.class);
+    
     public static String DEFAULT_OEM_ENCODING = "Cp850";
 
     static {
         String filename;
-        int level;
         FileInputStream in = null;
-
-        log = LogStream.getInstance();
 
         try {
             filename = System.getProperty( "jcifs.properties" );
@@ -71,30 +70,22 @@ public static int socketCount = 0;
             if (in != null)
                 in.close();
         } catch( IOException ioe ) {
-            if( log.level > 0 )
-                ioe.printStackTrace( log );
+        	LOGGER.warn("Error", ioe);
         }
 
-        if(( level = Config.getInt( "jcifs.util.loglevel", -1 )) != -1 ) {
-            LogStream.setLevel( level );
+        if(Config.getInt( "jcifs.util.loglevel", -1 ) != -1 ) {
+        	LOGGER.warn("Ignoring jcifs.util.loglevel setting. Using log4j configuration");
         }
 
         try {
             "".getBytes(DEFAULT_OEM_ENCODING);
         } catch (UnsupportedEncodingException uee) {
-            if (log.level >= 2) {
-                log.println("WARNING: The default OEM encoding " + DEFAULT_OEM_ENCODING +
-                " does not appear to be supported by this JRE. The default encoding will be US-ASCII.");
-            }
+        	LOGGER.warn("WARNING: The default OEM encoding " + DEFAULT_OEM_ENCODING +
+        			" does not appear to be supported by this JRE. The default encoding will be US-ASCII.");
             DEFAULT_OEM_ENCODING = "US-ASCII";
         }
 
-        if (log.level >= 4) {
-            try {
-                prp.store( log, "JCIFS PROPERTIES" );
-            } catch( IOException ioe ) {
-            }
-        }
+        LOGGER.debug("JCIFS Properties: " + prp);
     }
 
     /**
@@ -145,8 +136,7 @@ public static int socketCount = 0;
         try {
             Config.prp.putAll( System.getProperties() );
         } catch( SecurityException se ) {
-            if( log.level > 1 )
-                log.println( "SecurityException: jcifs will ignore System properties" );
+        	LOGGER.warn( "SecurityException: jcifs will ignore System properties" );
         }
     }
 
@@ -162,21 +152,16 @@ public static int socketCount = 0;
         try {
             prp.putAll( System.getProperties() );
         } catch( SecurityException se ) {
-            if( log.level > 1 )
-                log.println( "SecurityException: jcifs will ignore System properties" );
+        	LOGGER.warn( "SecurityException: jcifs will ignore System properties" );
         }
-    }
-
-    public static void store( OutputStream out, String header ) throws IOException {
-        prp.store( out, header );
     }
 
     /**
      * List the properties in the <code>Code</code>.
      */
 
-    public static void list( PrintStream out ) throws IOException {
-        prp.list( out );
+    public static void list( Logger logger ) {
+        logger.info("JCIFS Properties: " + prp);
     }
 
     /**
@@ -224,8 +209,7 @@ public static int socketCount = 0;
             try {
                 def = Integer.parseInt( s );
             } catch( NumberFormatException nfe ) {
-                if( log.level > 0 )
-                    nfe.printStackTrace( log );
+            	LOGGER.warn("Bad int", nfe);
             }
         }
         return def;
@@ -242,8 +226,7 @@ public static int socketCount = 0;
             try {
                 result = Integer.parseInt( s );
             } catch( NumberFormatException nfe ) {
-                if( log.level > 0 )
-                    nfe.printStackTrace( log );
+            	LOGGER.warn("Bad int", nfe);
             }
         }
         return result;
@@ -261,8 +244,7 @@ public static int socketCount = 0;
             try {
                 def = Long.parseLong( s );
             } catch( NumberFormatException nfe ) {
-                if( log.level > 0 )
-                    nfe.printStackTrace( log );
+            	LOGGER.warn("Bad long", nfe);
             }
         }
         return def;
@@ -280,10 +262,7 @@ public static int socketCount = 0;
             try {
                 def = InetAddress.getByName( addr );
             } catch( UnknownHostException uhe ) {
-                if( log.level > 0 ) {
-                    log.println( addr );
-                    uhe.printStackTrace( log );
-                }
+            	LOGGER.warn( "Will return default InetAddress.", uhe );
             }
         }
         return def;
@@ -295,10 +274,7 @@ public static int socketCount = 0;
             try {
                 return InetAddress.getByName( addr );
             } catch( UnknownHostException uhe ) {
-                if( log.level > 0 ) {
-                    log.println( "Ignoring jcifs.smb.client.laddr address: " + addr );
-                    uhe.printStackTrace( log );
-                }
+            	LOGGER.warn( "Ignoring jcifs.smb.client.laddr address: " + addr, uhe);
             }
         }
 
@@ -334,10 +310,7 @@ public static int socketCount = 0;
                 try {
                     arr[i] = InetAddress.getByName( addr );
                 } catch( UnknownHostException uhe ) {
-                    if( log.level > 0 ) {
-                        log.println( addr );
-                        uhe.printStackTrace( log );
-                    }
+                	LOGGER.warn("Returning default InetAddress: " + def, uhe);
                     return def;
                 }
             }

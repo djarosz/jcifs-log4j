@@ -20,7 +20,6 @@
 package jcifs.dcerpc.msrpc;
 
 import jcifs.smb.*;
-import jcifs.util.Hexdump;
 
 public class MsrpcShareEnum extends srvsvc.ShareEnumAll {
 

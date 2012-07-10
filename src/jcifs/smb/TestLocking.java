@@ -3,122 +3,124 @@ package jcifs.smb;
 import java.io.InputStream;
 import java.io.IOException;
 
-public class TestLocking implements Runnable
-{
+import org.apache.log4j.Logger;
 
-    int numThreads = 1;
-    int numIter = 1;
-    long delay = 100;
-    String url = null;
-    int numComplete = 0;
-    long ltime = 0L;
+public class TestLocking implements Runnable {
 
-    public void run()
-    {
-        try {
-            SmbFile f = new SmbFile(url);
-            SmbFile d = new SmbFile(f.getParent());
-            byte[] buf = new byte[1024];
+	private static final Logger LOGGER = Logger.getLogger(TestLocking.class);
 
-            for (int ii = 0; ii < numIter; ii++) {
+	int numThreads = 1;
+	int numIter = 1;
+	long delay = 100;
+	String url = null;
+	int numComplete = 0;
+	long ltime = 0L;
 
-                synchronized (this) {
-                    ltime = System.currentTimeMillis();
-                    wait();
-                }
+	public void run()
+	{
+		try {
+			SmbFile f = new SmbFile(url);
+			SmbFile d = new SmbFile(f.getParent());
+			byte[] buf = new byte[1024];
 
-                try {
-                    double r = Math.random();
-                    if (r < 0.333) {
-                        f.exists();
-//                      System.out.print('e');
-                    } else if (r < 0.667) {
-                        d.listFiles();
-//                      System.out.print('l');
-                    } else if (r < 1.0) {
-                        InputStream in = f.getInputStream();
-                        while (in.read(buf) > 0) {
-//                          System.out.print('r');
-                        }
-                        in.close();
-                    }
-                } catch (IOException ioe) {
-                    System.err.println(ioe.getMessage());
-//ioe.printStackTrace(System.err);
-                }
+			for (int ii = 0; ii < numIter; ii++) {
 
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            numComplete++;
-        }
-    }
+				synchronized (this) {
+					ltime = System.currentTimeMillis();
+					wait();
+				}
 
-    public static void main(String[] args) throws Exception
-    {
-        if (args.length < 1) {
-            System.err.println("usage: TestLocking [-t <numThreads>] [-i <numIter>] [-d <delay>] url");
-            System.exit(1);
-        }
+				try {
+					double r = Math.random();
+					if (r < 0.333) {
+						f.exists();
+						//                      LOGGER.debug('e');
+					} else if (r < 0.667) {
+						d.listFiles();
+						//                      LOGGER.debug('l');
+					} else if (r < 1.0) {
+						InputStream in = f.getInputStream();
+						while (in.read(buf) > 0) {
+							//                          LOGGER.debug('r');
+						}
+						in.close();
+					}
+				} catch (IOException ioe) {
+					LOGGER.error("", ioe);
+					//ioe.printStackTrace(System.err);
+				}
 
-        TestLocking t = new TestLocking();
-        t.ltime = System.currentTimeMillis();
+			}
+		} catch (Exception e) {
+			LOGGER.error("", e);
+		} finally {
+			numComplete++;
+		}
+	}
 
-        for (int ai = 0; ai < args.length; ai++) {
-            if (args[ai].equals("-t")) {
-                ai++;
-                t.numThreads = Integer.parseInt(args[ai]);
-            } else if (args[ai].equals("-i")) {
-                ai++;
-                t.numIter = Integer.parseInt(args[ai]);
-            } else if (args[ai].equals("-d")) {
-                ai++;
-                t.delay = Long.parseLong(args[ai]);
-            } else {
-                t.url = args[ai];
-            }
-        }
+	public static void main(String[] args) throws Exception
+	{
+		if (args.length < 1) {
+			LOGGER.error("usage: TestLocking [-t <numThreads>] [-i <numIter>] [-d <delay>] url");
+			System.exit(1);
+		}
 
-        Thread[] threads = new Thread[t.numThreads];
-        int ti;
+		TestLocking t = new TestLocking();
+		t.ltime = System.currentTimeMillis();
 
-        for (ti = 0; ti < t.numThreads; ti++) {
-            threads[ti] = new Thread(t);
-            System.out.print(threads[ti].getName());
-            threads[ti].start();
-        }
+		for (int ai = 0; ai < args.length; ai++) {
+			if (args[ai].equals("-t")) {
+				ai++;
+				t.numThreads = Integer.parseInt(args[ai]);
+			} else if (args[ai].equals("-i")) {
+				ai++;
+				t.numIter = Integer.parseInt(args[ai]);
+			} else if (args[ai].equals("-d")) {
+				ai++;
+				t.delay = Long.parseLong(args[ai]);
+			} else {
+				t.url = args[ai];
+			}
+		}
 
-        while (t.numComplete < t.numThreads) {
-            long delay;
+		Thread[] threads = new Thread[t.numThreads];
+		int ti;
 
-            do {
-                delay = 2L;
+		for (ti = 0; ti < t.numThreads; ti++) {
+			threads[ti] = new Thread(t);
+			LOGGER.info(threads[ti].getName());
+			threads[ti].start();
+		}
 
-                synchronized (t) {
-                    long expire = t.ltime + t.delay;
-                    long ctime = System.currentTimeMillis();
+		while (t.numComplete < t.numThreads) {
+			long delay;
 
-                    if (expire > ctime)
-                        delay = expire - ctime;
-                }
+			do {
+				delay = 2L;
 
-if (delay > 2)
-System.out.println("delay=" + delay);
-                Thread.sleep(delay);
-            } while (delay > 2);
+				synchronized (t) {
+					long expire = t.ltime + t.delay;
+					long ctime = System.currentTimeMillis();
 
-            synchronized (t) {
-                t.notifyAll();
-            }
-//System.out.println("numComplete=" + t.numComplete + ",numThreads=" + t.numThreads);
-        }
+					if (expire > ctime)
+						delay = expire - ctime;
+				}
 
-        for (ti = 0; ti < t.numThreads; ti++) {
-            threads[ti].join();
-            System.out.print(threads[ti].getName());
-        }
+				if (delay > 2)
+					LOGGER.debug("delay=" + delay);
+				Thread.sleep(delay);
+			} while (delay > 2);
 
-        System.out.println();
-    }
+			synchronized (t) {
+				t.notifyAll();
+			}
+			//LOGGER.debug("numComplete=" + t.numComplete + ",numThreads=" + t.numThreads);
+		}
+
+		for (ti = 0; ti < t.numThreads; ti++) {
+			threads[ti].join();
+			LOGGER.info(threads[ti].getName());
+		}
+
+	}
 }

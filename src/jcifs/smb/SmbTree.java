@@ -18,13 +18,11 @@
 
 package jcifs.smb;
 
-import java.io.IOException;
-import java.net.UnknownHostException;
-import jcifs.UniAddress;
-import jcifs.netbios.NbtAddress;
-import jcifs.Config;
+import org.apache.log4j.Logger;
 
 class SmbTree {
+	
+	private static final Logger LOGGER = Logger.getLogger(SmbTree.class);
 
     private static int tree_conn_counter;
 
@@ -118,7 +116,7 @@ synchronized (session.transport()) {
         try {
             session.send( request, response );
         } catch( SmbException se ) {
-            if (se.getNtStatus() == se.NT_STATUS_NETWORK_NAME_DELETED) {
+            if (se.getNtStatus() == SmbException.NT_STATUS_NETWORK_NAME_DELETED) {
                 /* Someone removed the share while we were
                  * connected. Bastards! Disconnect this tree
                  * so that it reconnects cleanly should the share
@@ -166,8 +164,7 @@ synchronized (session.transport()) {
              * Tree Connect And X Request / Response
              */
     
-            if( session.transport.log.level >= 4 )
-                session.transport.log.println( "treeConnect: unc=" + unc + ",service=" + service );
+            LOGGER.debug( "treeConnect: unc=" + unc + ",service=" + service );
     
             SmbComTreeConnectAndXResponse response =
                     new SmbComTreeConnectAndXResponse( andxResponse );
@@ -199,9 +196,7 @@ synchronized (session.transport()) {
             try {
                 send( new SmbComTreeDisconnect(), null );
             } catch( SmbException se ) {
-                if (session.transport.log.level > 1) {
-                    se.printStackTrace( session.transport.log );
-                }
+            	LOGGER.warn("", se);
             }
         }
         inDfs = false;
