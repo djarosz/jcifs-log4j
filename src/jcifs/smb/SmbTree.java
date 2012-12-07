@@ -181,24 +181,27 @@ class SmbTree {
 				tree_num = tree_conn_counter++;
 
 				connectionState = 2; // connected
-				
-				LOGGER.debug("Notifiing all threads waitnig on transport");
-				session.transport().notifyAll();
+
+				LOGGER.debug("treeConnect: Connected unc=" + unc + ",service=" + service);
 			} catch (SmbException se) {
 				LOGGER.error("There was an error while connection", se);
 				treeDisconnect(true);
+                connectionState = 0;
 				throw se;
 			} catch (RuntimeException e) {
 				LOGGER.error("There was an error while connection", e);
 				treeDisconnect(true);
-				throw e;				
+                connectionState = 0;
+				throw e;
 			} catch (Error e) {
 				LOGGER.error("There was an error while connection", e);
 				treeDisconnect(true);
-				throw e;				
+                connectionState = 0;
+				throw e;
 			}
 		}
 	}
+
 	void treeDisconnect( boolean inError ) {
 		synchronized (session.transport()) {
 
