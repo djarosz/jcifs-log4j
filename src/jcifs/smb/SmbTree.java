@@ -44,7 +44,7 @@ class SmbTree {
 	SmbTree( SmbSession session, String share, String service ) {
 		this.session = session;
 		this.share = share.toUpperCase();
-		if( service != null && service.startsWith( "??" ) == false ) {
+		if( service != null && !service.startsWith( "??" ) ) {
 			this.service = service;
 		}
 		this.service0 = this.service;
@@ -56,6 +56,7 @@ class SmbTree {
 				( service == null || service.startsWith( "??" ) ||
 				this.service.equalsIgnoreCase( service ));
 	}
+
 	public boolean equals(Object obj) {
 		if (obj instanceof SmbTree) {
 			SmbTree tree = (SmbTree)obj;
@@ -63,6 +64,7 @@ class SmbTree {
 		}
 		return false;
 	}
+
 	void send( ServerMessageBlock request,
 			ServerMessageBlock response ) throws SmbException {
 		synchronized (session.transport()) {
@@ -73,7 +75,7 @@ class SmbTree {
 			if( request == null || (response != null && response.received )) {
 				return;
 			}
-			if( service.equals( "A:" ) == false ) {
+			if( !service.equals( "A:" )  ) {
 				switch( request.command ) {
 				case ServerMessageBlock.SMB_COM_OPEN_ANDX:
 				case ServerMessageBlock.SMB_COM_NT_CREATE_ANDX:
@@ -128,6 +130,7 @@ class SmbTree {
 			}
 		}
 	}
+
 	void treeConnect( ServerMessageBlock andx,
 			ServerMessageBlock andxResponse ) throws SmbException {
 
@@ -186,17 +189,14 @@ class SmbTree {
 			} catch (SmbException se) {
 				LOGGER.error("There was an error while connection", se);
 				treeDisconnect(true);
-                connectionState = 0;
 				throw se;
 			} catch (RuntimeException e) {
 				LOGGER.error("There was an error while connection", e);
 				treeDisconnect(true);
-                connectionState = 0;
 				throw e;
 			} catch (Error e) {
 				LOGGER.error("There was an error while connection", e);
 				treeDisconnect(true);
-                connectionState = 0;
 				throw e;
 			}
 		}
@@ -213,7 +213,7 @@ class SmbTree {
 				try {
 					send( new SmbComTreeDisconnect(), null );
 				} catch( SmbException se ) {
-					LOGGER.warn("", se);
+					LOGGER.warn("Error while disconnecting", se);
 				}
 			}
 			inDfs = false;
@@ -233,4 +233,5 @@ class SmbTree {
 				",inDomainDfs=" + inDomainDfs +
 				",connectionState=" + connectionState + "]";
 	}
+
 }

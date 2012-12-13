@@ -19,16 +19,23 @@
 
 package jcifs.smb;
 
-import java.io.*;
-import java.net.*;
-import java.util.*;
-
+import jcifs.UniAddress;
+import jcifs.netbios.*;
+import jcifs.util.Encdec;
+import jcifs.util.Hexdump;
+import jcifs.util.transport.Request;
+import jcifs.util.transport.Response;
+import jcifs.util.transport.Transport;
+import jcifs.util.transport.TransportException;
 import org.apache.log4j.Logger;
 
-import jcifs.*;
-import jcifs.netbios.*;
-import jcifs.util.*;
-import jcifs.util.transport.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.*;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.ListIterator;
 
 public class SmbTransport extends Transport implements SmbConstants {
 	
@@ -41,6 +48,7 @@ public class SmbTransport extends Transport implements SmbConstants {
     static synchronized SmbTransport getSmbTransport( UniAddress address, int port ) {
         return getSmbTransport( address, port, LADDR, LPORT, null );
     }
+
     static synchronized SmbTransport getSmbTransport( UniAddress address, int port,
                                     InetAddress localAddr, int localPort, String hostName ) {
         SmbTransport conn;
@@ -120,6 +128,7 @@ public class SmbTransport extends Transport implements SmbConstants {
     synchronized SmbSession getSmbSession() {
         return getSmbSession( new NtlmPasswordAuthentication( null, null, null ));
     }
+
     synchronized SmbSession getSmbSession( NtlmPasswordAuthentication auth ) {
         SmbSession ssn;
         long now;
@@ -151,6 +160,7 @@ public class SmbTransport extends Transport implements SmbConstants {
 
         return ssn;
     }
+
     boolean matches( UniAddress address, int port, InetAddress localAddr, int localPort, String hostName ) {
         if (hostName == null)
             hostName = address.getHostName();
@@ -164,6 +174,7 @@ public class SmbTransport extends Transport implements SmbConstants {
                                     localAddr.equals( this.localAddr ))) &&
                     localPort == this.localPort;
     }
+
     boolean hasCapability( int cap ) throws SmbException {
         try {
             connect( RESPONSE_TIMEOUT );
@@ -172,6 +183,7 @@ public class SmbTransport extends Transport implements SmbConstants {
         }
         return (capabilities & cap) == cap;
     }
+
     boolean isSignatureSetupRequired( NtlmPasswordAuthentication auth ) {
         return ( flags2 & ServerMessageBlock.FLAGS2_SECURITY_SIGNATURES ) != 0 &&
                 digest == null &&
@@ -182,14 +194,14 @@ public class SmbTransport extends Transport implements SmbConstants {
     void ssn139() throws IOException {
         Name calledName = new Name( address.firstCalledName(), 0x20, null );
         do {
-/* These Socket constructors attempt to connect before SO_TIMEOUT can be applied
+            /* These Socket constructors attempt to connect before SO_TIMEOUT can be applied
             if (localAddr == null) {
                 socket = new Socket( address.getHostAddress(), 139 );
             } else {
                 socket = new Socket( address.getHostAddress(), 139, localAddr, localPort );
             }
             socket.setSoTimeout( SO_TIMEOUT );
-*/
+            */
 
             socket = new Socket();
             if (localAddr != null)
@@ -238,6 +250,7 @@ public class SmbTransport extends Transport implements SmbConstants {
 
         throw new IOException( "Failed to establish session with " + address );
     }
+
     private void negotiate( int port, ServerMessageBlock resp ) throws IOException {
         /* We cannot use Transport.sendrecv() yet because
          * the Transport thread is not setup until doConnect()
@@ -294,6 +307,7 @@ public class SmbTransport extends Transport implements SmbConstants {
             Hexdump.hexdump( LOGGER, sbuf, 4, n );
         }
     }
+
     public void connect() throws SmbException {
         try {
             super.connect( RESPONSE_TIMEOUT );
@@ -301,6 +315,7 @@ public class SmbTransport extends Transport implements SmbConstants {
             throw new SmbException( "Failed to connect: " + address, te );
         }
     }
+
     protected void doConnect() throws IOException {
         /*
          * Negotiate Protocol Request / Response
@@ -351,6 +366,7 @@ public class SmbTransport extends Transport implements SmbConstants {
             }
         }
     }
+
     protected void doDisconnect( boolean hard ) throws IOException {
         ListIterator iter = sessions.listIterator();
         try {
@@ -374,6 +390,7 @@ public class SmbTransport extends Transport implements SmbConstants {
         if (++mid == 32000) mid = 1;
         ((ServerMessageBlock)request).mid = mid;
     }
+
     protected Request peekKey() throws IOException {
         int n;
         do {
@@ -444,6 +461,7 @@ public class SmbTransport extends Transport implements SmbConstants {
             out.write( BUF, 0, 4 + n );
         }
     }
+
     protected void doSend0( Request request ) throws IOException {
         try {
             doSend( request );
@@ -505,6 +523,7 @@ public class SmbTransport extends Transport implements SmbConstants {
             Hexdump.hexdump( LOGGER, BUF, 4, size );
         }
     }
+
     protected void doSkip() throws IOException {
         int size = Encdec.dec_uint16be( sbuf, 2 ) & 0xFFFF;
         if (size < 33 || (4 + size) > rcv_buf_size ) {
@@ -514,6 +533,7 @@ public class SmbTransport extends Transport implements SmbConstants {
             in.skip( size - 32 );
         }
     }
+
     void checkStatus( ServerMessageBlock req, ServerMessageBlock resp ) throws SmbException {
         resp.errorCode = SmbException.getStatusByCode( resp.errorCode );
         switch( resp.errorCode ) {
@@ -552,6 +572,7 @@ public class SmbTransport extends Transport implements SmbConstants {
             throw new SmbException( "Signature verification failed." );
         }
     }
+
     void send( ServerMessageBlock request, ServerMessageBlock response ) throws SmbException {
 
         connect(); /* must negotiate before we can test flags2, useUnicode, etc */
@@ -648,21 +669,21 @@ public class SmbTransport extends Transport implements SmbConstants {
 
         checkStatus( request, response );
     }
+
     public String toString() {
         return super.toString() + "[" + address + ":" + port + "]";
     }
 
     /* DFS */
 
-    /* Split DFS path like \fs1.example.com\root5\link2\foo\bar.txt into at
+    /** Split DFS path like \fs1.example.com\root5\link2\foo\bar.txt into at
      * most 3 components (not including the first index which is always empty):
      * result[0] = ""
      * result[1] = "fs1.example.com"
      * result[2] = "root5"
      * result[3] = "link2\foo\bar.txt"
      */
-    void dfsPathSplit(String path, String[] result)
-    {
+    void dfsPathSplit(String path, String[] result) {
         int ri = 0, rlast = result.length - 1;
         int i = 0, b = 0, len = path.length();
 
@@ -681,6 +702,7 @@ public class SmbTransport extends Transport implements SmbConstants {
             result[ri++] = "";
         }
     }
+
     DfsReferral getDfsReferrals(NtlmPasswordAuthentication auth,
                 String path,
                 int rn) throws SmbException {
@@ -726,6 +748,7 @@ public class SmbTransport extends Transport implements SmbConstants {
 
         return dr.next;
     }
+
     DfsReferral[] __getDfsReferrals(NtlmPasswordAuthentication auth,
                 String path,
                 int rn) throws SmbException {

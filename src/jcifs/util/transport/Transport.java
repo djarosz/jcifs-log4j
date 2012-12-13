@@ -1,9 +1,10 @@
 package jcifs.util.transport;
 
-import java.io.*;
-import java.util.*;
-
 import org.apache.log4j.Logger;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.HashMap;
 
 /**
  * This class simplifies communication for protocols that support
@@ -13,16 +14,15 @@ import org.apache.log4j.Logger;
  * properly. Apparatus is provided to send and receive requests
  * concurrently.
  */
-
 public abstract class Transport implements Runnable {
 
     private static final Logger LOGGER = Logger.getLogger(Transport.class);
     static int id = 0;
 
     public static int readn( InputStream in,
-                byte[] b,
-                int off,
-                int len ) throws IOException {
+                             byte[] b,
+                             int off,
+                             int len ) throws IOException {
         int i = 0, n = -5;
 
         while (i < len) {
@@ -58,38 +58,39 @@ public abstract class Transport implements Runnable {
     protected abstract void doSkip() throws IOException;
 
     public synchronized void sendrecv( Request request,
-                    Response response,
-                    long timeout ) throws IOException {
-            makeKey( request );
-            response.isReceived = false;
-            try {
-                response_map.put( request, response );
-                doSend( request );
-                response.expiration = System.currentTimeMillis() + timeout;
-                while (!response.isReceived) {
-                    wait( timeout );
-                    timeout = response.expiration - System.currentTimeMillis();
-                    if (timeout <= 0) {
-                        throw new TransportException( name +
-                                " timedout waiting for response to " +
-                                request );
-                    }
+                                       Response response,
+                                       long timeout ) throws IOException {
+        makeKey( request );
+        response.isReceived = false;
+        try {
+            response_map.put( request, response );
+            doSend( request );
+            response.expiration = System.currentTimeMillis() + timeout;
+            while (!response.isReceived) {
+                wait( timeout );
+                timeout = response.expiration - System.currentTimeMillis();
+                if (timeout <= 0) {
+                    throw new TransportException( name +
+                            " timedout waiting for response to " +
+                            request );
                 }
-            } catch( IOException ioe ) {
-            	LOGGER.warn("IO ERROR", ioe);
-            	
-                try {
-                    disconnect( true );
-                } catch( IOException ioe2 ) {
-                	LOGGER.warn("IO ERROR while disconnecting", ioe);
-                }
-                throw ioe;
-            } catch( InterruptedException ie ) {
-                throw new TransportException( ie );
-            } finally {
-                response_map.remove( request );
             }
+        } catch( IOException ioe ) {
+            LOGGER.warn("IO ERROR", ioe);
+
+            try {
+                disconnect( true );
+            } catch( IOException ioe2 ) {
+                LOGGER.warn("IO ERROR while disconnecting", ioe);
+            }
+            throw ioe;
+        } catch( InterruptedException ie ) {
+            throw new TransportException( ie );
+        } finally {
+            response_map.remove( request );
+        }
     }
+
     private void loop() {
         while( thread == Thread.currentThread() ) {
             try {
@@ -99,7 +100,7 @@ public abstract class Transport implements Runnable {
                 synchronized (this) {
                     Response response = (Response)response_map.get( key );
                     if (response == null) {
-                    	LOGGER.debug( "Invalid key, skipping message" );
+                        LOGGER.debug( "Invalid key, skipping message" );
                         doSkip();
                     } else {
                         doRecv( response );
@@ -115,7 +116,7 @@ public abstract class Transport implements Runnable {
                 boolean hard = timeout == false;
 
                 if (!timeout) {
-                	LOGGER.debug("Not a time exception", ex);
+                    LOGGER.debug("Not a time exception", ex);
                 }
 
                 try {
@@ -190,7 +191,7 @@ public abstract class Transport implements Runnable {
             /* This guarantees that we leave in a valid state
              */
             if (state != 0 && state != 3 && state != 4) {
-            	LOGGER.info("Invalid state: " + state);
+                LOGGER.info("Invalid state: " + state);
                 state = 0;
                 thread = null;
             }
@@ -218,7 +219,7 @@ public abstract class Transport implements Runnable {
                 state = 0;
                 break;
             default:
-            	LOGGER.info("Invalid state: " + state);
+                LOGGER.info("Invalid state: " + state);
                 thread = null;
                 state = 0;
                 break;
@@ -227,6 +228,7 @@ public abstract class Transport implements Runnable {
         if (ioe != null)
             throw ioe;
     }
+
     public void run() {
         Thread run_thread = Thread.currentThread();
         Exception ex0 = null;
@@ -247,7 +249,7 @@ public abstract class Transport implements Runnable {
                      * doConnect returned too late, just ignore.
                      */
                     if (ex0 != null) {
-                    	LOGGER.info("There was an exception ", ex0);
+                        LOGGER.info("There was an exception ", ex0);
                     }
                     return;
                 }
