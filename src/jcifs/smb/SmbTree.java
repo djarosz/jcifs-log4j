@@ -189,14 +189,17 @@ class SmbTree {
 			} catch (SmbException se) {
 				LOGGER.error("There was an error while connection", se);
 				treeDisconnect(true);
+				connectionState = 0;
 				throw se;
 			} catch (RuntimeException e) {
 				LOGGER.error("There was an error while connection", e);
 				treeDisconnect(true);
+				connectionState = 0;
 				throw e;
 			} catch (Error e) {
 				LOGGER.error("There was an error while connection", e);
 				treeDisconnect(true);
+				connectionState = 0;
 				throw e;
 			}
 		}
