@@ -9,37 +9,36 @@
 <li><a href="#ukproto">Why is java.net.URL throwing unknown protocol: smb Exceptions?</a></li>
 <li><a href="#ukhost">I'm getting these UnknownHostExceptions right from the start. What am I doing wrong?</a></li>
 <li><a href="#netunreach">Why do I get these "Network is unreachable" IOExceptions?</a></li>
-<li><a href="#auth">How can I authenticate arbitrary user credentials from an application or web clients against Active Directory?</a></li>
+<li><a href="#auth">How can I authenticate arbitrary user credentials from an application or web clients against an NT domain?</a></li>
 </ol>
 
 <a name="ntlmhttpauth"/>
 <em>Q:</em> How do I do NTLM HTTP authentication (a.k.a Single Sign On) for my website?
 <p/>
-<em>A:</em> See "Jespa":
-<blockquote>
-<a href="http://www.ioplex.com/jespa.html">http://www.ioplex.com/jespa.html</a>
-</blockquote>
-Jespa is a <i>complete</i> NTLM implementation in 100% Java that properly implements both the server and client side of NTLMv2, NTLMv1, NTLM2 Session Security and Key Exchange.
-Of particular interest to users of the old JCIFS SSO Filter, Jespa can properly authenticate NTLMv2 clients just like a Windows server does (using the NetrLogonSamLogon DCERPC call over NETLOGON w/ Secure Channel) and it includes an HTTP SSO Servlet Filter.
-<p/>
-Note: Jespa uses JCIFS for DCERPC transport and some basic client side NTLM calculations. Jespa is not Open Source (although it is free for up to 25 users). Please contact IOPLEX Software support if you have any questions regarding Jespa.
-<p/>
-Note: The old SSO Filter that used to be included with JCIFS used a "man in the middle" technique that cannot support NTLMv2 and has therefore been removed from the JCIFS package. See the following post for details:
-<p/>
-<blockquote>
-<a href="http://lists.samba.org/archive/jcifs/2008-October/008227.html">http://lists.samba.org/archive/jcifs/2008-October/008227.html</a>
-</blockquote>
+<em>A:</em> See the <a href="ntlmhttpauth.html">JCIFS NTLM HTTP Authentication</a> Filter documentation.
 <p/>
 
 <!-- * * * * * * * * -->
 
 <a name="ntlmv2"/>
-<em>Q:</em> Does jCIFS support NTLMv2?
+<em>Q:</em> Does jCIFS support NTLMv2? JCIFS is failing to authenticate. I suspect it might be because we are using NTLMv2.
 <p/>
-<em>A:</em> Yes. As of 1.3.0, JCIFS fully supports NTLMv2 and uses it by default.
-<p/>
-Note: The NTLM HTTP SSO Filter that used to be included with JCIFS cannot support NTLMv2. See <a href="#ntlmhttpauth">the above question</a> for details.
-<p/>
+<em>A:</em> No. But jCIFS does support LMv2 (which is a "stripped down" NTLMv2). If the client is failing because NTLMv2 is required, there are two ways to fix this situation:
+<ol>
+<li>
+Set the property <tt>jcifs.smb.lmCompatibility</tt> to 3. This will cause jCIFS to use LMv2. This is not strictly NTLMv2 only if that is what your company policy requires but does provide a higher level over security than NTLM.
+</li><li>
+On the target server, look at the registry value:
+<blockquote>
+<tt>HKLM\System\CurrentControlSet\Control\Lsa\LmCompatibilityLevel</tt>
+</blockquote>
+It's probably set to 3, 4, or 5. Setting this value to 0, 1, or 2 will reduce the security level on the server to permit jCIFS to authenticate with that server. This setting is described in detail in the following Microsoft KB article:
+<blockquote>
+<a href="http://support.microsoft.com/default.aspx?scid=KB;en-us;239869">http://support.microsoft.com/default.aspx?scid=KB;en-us;239869</a>
+</blockquote>
+Setting it to 0 or 1 will do LM/NTLM (version 1); 2 will just do NTLM.
+</li>
+</ol>
 
 <!-- * * * * * * * * -->
 
@@ -188,9 +187,11 @@ Another cause of this is if your host does not have a suitable network interface
 <!-- * * * * * * * * -->
 
 <a name="auth"/>
-<em>Q:</em> How can I authenticate arbitrary user credentials from an application or web clients against Active Directory?
+<em>Q:</em> How can I authenticate arbitrary user credentials from an application or web clients against an NT domain?
 <p/>
-<em>A:</em> There are two ways to do this. One is to use the <tt>jcifs.smb.Session.logon()</tt> method to perform an <tt>SMB_COM_SESSION_SETUP_ANDX</tt> like:
+<em>A:</em> There are several ways to do this. For web clients you can use the <a href="ntlmhttpauth.html">JCIFS NTLM HTTP Authentication</a> Filter. It uses the <tt>jcifs.http.NtlmSsp</tt> class to negotiate NTLM password hashes with MSIE clients. For custom HTTP authentication, it may be desirable to use <tt>jcifs.http.NtlmSsp</tt> directly starting with the Filter as a guide.
+<p/>
+To authenticate arbitrary credentials (not necessarily web clients) the <tt>jcifs.smb.Session.logon()</tt> method can be used like:
 <pre>
 UniAddress mydomaincontroller = UniAddress.getByName( "192.168.1.15" );
 NtlmPasswordAuthentication mycreds = new NtlmPasswordAuthentication( "ntdom", "user", "pass" );
@@ -207,5 +208,21 @@ try {
 }
 </pre>
 
-However, just like using an LDAP "bind" to validate credentials, the above method is a mild abuse of the protocol and can cause issues (e.g. with personal workstation AD security policy). The only way to <i>properly</i> validate NTLM credentials is with a NetrLogonSamLogon DCERPC call with the NETLOGON service. The only 100% Java solution that does that is <a href="http://www.ioplex.com/jespa.html">Jespa</a>.
+Although for the jCIFS 0.6.x series or prior it would be necessary to use something like the following:
+
+<pre>
+try {
+    SmbFile dummy = new SmbFile( "smb://ntdom;user:pass@192.168.1.15/IPC$" );
+    dummy.exists();
+    // SUCCESS
+    return true;
+} catch( SmbAuthException sae ) {
+    // AUTHENTICATION FAILURE
+    return false;
+} catch( SmbException se ) {
+    // NETWORK PROBLEMS?
+    se.printStackTrace();
+}
+</pre>
+
 </topic>

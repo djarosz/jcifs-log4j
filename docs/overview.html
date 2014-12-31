@@ -155,8 +155,6 @@ Note: The Cp860 charset converter is located in jre/lib/charsets.jar which AFAIK
 As of jcifs-1.2.8 this property no longer defaults to the <tt>file.encoding</tt> system property because it was almost always meaningless (e.g. usually it's UTF-8 on Linux and no CIFS server currently emits UTF-8).
 </td></tr>
 
-<tr><td>jcifs.smb.client.useExtendedSecurity</td><td>True by default but this must be set to false for Samba 3.0.x as it seems older versions of Samba do not support *raw* NTLMSSP and currently JCIFS does not support SPNEGO.</td></tr>
-
 <tr bgcolor="#ccccff"><td colspan="2"><font size="+2"><b>Less Commonly Used Properties</b></font><br>
 <b>These properties are not required for the client to function but may be necessary for optimal utility</b></td></tr>
 
@@ -247,15 +245,13 @@ Setting this property to <tt>true</tt> enables basic authentication over plain H
 </td></tr>
 
 <tr><td width="20%"><b>jcifs.smb.lmCompatibility</b></td><td>
-This client can perform NTLMv2 with and without NTLMSSP as well as NTLMv1. The default lmCompatibility level is 3 to indicate that NTLMv2 should be favored (although prior to JCIFS 1.3.0, NTLMv1 was the default). This can be changed by using this property with an integer that specifies the &quot;level&quot; of security:
+This client can perform NTLM and LMv2 authentication. The default behavior is to use NTLM version 1. This can be changed by using this property with an integer that specifies the &quot;level&quot; of security:
 <ul>
-<li>0,1 -- Sends LM and NTLM responses.
-<li>2 -- Sends only the NTLM response. This is more secure than Levels 0 and 1, because it eliminates the cryptographically-weak LM response.
-<li>3,4,5 -- Sends LMv2 and NTLMv2 data. NTLMv2 session security is also negotiated if the server supports it. This is the default behavior (in 1.3.0 or later).
+<li>0,1 -- Sends LM and NTLM responses.  This is the default behavior.
+<li>2 -- Sends only the NTLM response.  This is more secure than Levels 0 and 1, because it eliminates the cryptographically-weak LM response.
+<li>3,4,5 -- Sends only the LMv2 response.  This offers a higher level of security.
 </ul>
 These values mirror those used with the Windows registry key <tt>HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa</tt> used for the same purpose. See the page entitled <a href="http://davenport.sourceforge.net/ntlm.html">The NTLM Authentication Protocol</a> for a technical description of these authentication mechanisms.
-<p/>
-This must be set to 0 for older versions of Samba (3.0.x) as it seems they do not support *raw* NTLMSSP and currently JCIFS does not support SPNEGO.
 </td></tr>
 
 <tr><td width="20%"><b>jcifs.smb.client.ssnLimit</b></td><td>

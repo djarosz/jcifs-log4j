@@ -125,17 +125,14 @@ This is rare but NetBIOS provides for a "scope id" to be used in a attempt to co
 The <code>resolveOrder</code> property specifies a comma separated list of name resolution methods to use as well as the order in which they should be used. The method names are <code>LMHOSTS</code>, <code>WINS</code>, <code>BCAST</code>, and <code>DNS</code>. The default order is:
 
 <pre>
-resolveOrder=LMHOSTS,WINS,DNS,BCAST
+resolveOrder=LMHOSTS,WINS,BCAST,DNS
 </pre>
 
 or if the <code>jcifs.netbios.wins</code> property is not defined the default will be just
 
 <pre>
-resolveOrder=LMHOSTS,DNS,BCAST
+resolveOrder=LMHOSTS,BCAST,DNS
 </pre>
-
-
-<small>Note: The above defaults were changed in 1.3.3 from <code>LMHOSTS,WINS,BCAST,DNS</code> and <code>LMHOSTS,BCAST,DNS</code> respectively. Meaning <code>BCAST</code> was moved to <i>after</i> <code>DNS</code>.</small>
 
 Both the <tt>UniAddress</tt> and <tt>NbtAddress</tt> classes honor the <tt>jcifs.resolveOrder</tt> property but the <tt>UniAddress</tt> class is used almost exclusively by jCIFS internally whereas the <tt>NbtAddress</tt> class will ignore the "DNS" token.
 <p></p>
@@ -229,7 +226,7 @@ Ask your network administrator if lmhosts files are used and if you should use o
 
 <HR noshade="noshade">
 <SMALL>
-    Last updated Mar 18, 2009<BR>jcifs-1.3.7<BR>
+    Last updated Oct 20, 2008<BR>jcifs-1.2.25<BR>
     Copyright &copy; 2004 The JCIFS Project<BR>
 <a style="color: black;" href="http://validator.w3.org/check/referer">validate this page</a></SMALL>
 </BODY>

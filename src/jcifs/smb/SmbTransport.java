@@ -38,10 +38,10 @@ public class SmbTransport extends Transport implements SmbConstants {
     static HashMap dfsRoots = null;
 
     static synchronized SmbTransport getSmbTransport( UniAddress address, int port ) {
-        return getSmbTransport( address, port, LADDR, LPORT, null );
+        return getSmbTransport( address, port, LADDR, LPORT );
     }
     static synchronized SmbTransport getSmbTransport( UniAddress address, int port,
-                                    InetAddress localAddr, int localPort, String hostName ) {
+                                    InetAddress localAddr, int localPort ) {
         SmbTransport conn;
 
         synchronized( CONNECTIONS ) {
@@ -49,7 +49,7 @@ public class SmbTransport extends Transport implements SmbConstants {
                 ListIterator iter = CONNECTIONS.listIterator();
                 while( iter.hasNext() ) {
                     conn = (SmbTransport)iter.next();
-                    if( conn.matches( address, port, localAddr, localPort, hostName ) &&
+                    if( conn.matches( address, port, localAddr, localPort ) &&
                             ( SSN_LIMIT == 0 || conn.sessions.size() < SSN_LIMIT )) {
                         return conn;
                     }
@@ -82,7 +82,6 @@ public class SmbTransport extends Transport implements SmbConstants {
         int serverTimeZone;
         int encryptionKeyLength;
         byte[] encryptionKey;
-        byte[] guid;
     }
 
     InetAddress localAddr;
@@ -92,7 +91,7 @@ public class SmbTransport extends Transport implements SmbConstants {
     int port, mid;
     OutputStream out;
     InputStream in;
-    byte[] sbuf = new byte[512]; /* small local buffer */
+    byte[] sbuf = new byte[255]; /* small local buffer */
     SmbComBlankResponse key = new SmbComBlankResponse();
     long sessionExpiration = System.currentTimeMillis() + SO_TIMEOUT;
     LinkedList referrals = new LinkedList();
@@ -107,7 +106,7 @@ public class SmbTransport extends Transport implements SmbConstants {
     int capabilities = CAPABILITIES;
     int sessionKey = 0x00000000;
     boolean useUnicode = USE_UNICODE;
-    String tconHostName = null;
+    String tconHostName;
 
     SmbTransport( UniAddress address, int port, InetAddress localAddr, int localPort ) {
         this.address = address;
@@ -150,11 +149,8 @@ public class SmbTransport extends Transport implements SmbConstants {
 
         return ssn;
     }
-    boolean matches( UniAddress address, int port, InetAddress localAddr, int localPort, String hostName ) {
-        if (hostName == null)
-            hostName = address.getHostName();
-        return (this.tconHostName == null || hostName.equalsIgnoreCase(this.tconHostName)) &&
-                    address.equals( this.address ) &&
+    boolean matches( UniAddress address, int port, InetAddress localAddr, int localPort ) {
+        return address.equals( this.address ) &&
                     (port == 0 || port == this.port ||
                             /* port 139 is ok if 445 was requested */
                             (port == 445 && this.port == 139)) &&
@@ -181,21 +177,12 @@ public class SmbTransport extends Transport implements SmbConstants {
     void ssn139() throws IOException {
         Name calledName = new Name( address.firstCalledName(), 0x20, null );
         do {
-/* These Socket constructors attempt to connect before SO_TIMEOUT can be applied
             if (localAddr == null) {
                 socket = new Socket( address.getHostAddress(), 139 );
             } else {
                 socket = new Socket( address.getHostAddress(), 139, localAddr, localPort );
             }
             socket.setSoTimeout( SO_TIMEOUT );
-*/
-
-            socket = new Socket();
-            if (localAddr != null)
-                socket.bind(new InetSocketAddress(localAddr, localPort));
-            socket.connect(new InetSocketAddress(address.getHostAddress(), 139), CONN_TIMEOUT);
-            socket.setSoTimeout( SO_TIMEOUT );
-
             out = socket.getOutputStream();
             in = socket.getInputStream();
 
@@ -245,25 +232,24 @@ public class SmbTransport extends Transport implements SmbConstants {
          * until we have properly negotiated.
          */
         synchronized (sbuf) {
+            /* If jcifs.netbios.hostname is set this *probably* means there
+             * is a policy regarding which hosts a user can connect from. This
+             * requires communicating over port 139 rather than 445.
+             */
+            if (false && NETBIOS_HOSTNAME != null && NETBIOS_HOSTNAME.equals( "" ) == false) {
+                port = 139;
+            }
             if (port == 139) {
                 ssn139();
             } else {
                 if (port == 0)
                     port = DEFAULT_PORT; // 445
-/* These Socket constructors attempt to connect before SO_TIMEOUT can be applied
                 if (localAddr == null) {
                     socket = new Socket( address.getHostAddress(), port );
                 } else {
                     socket = new Socket( address.getHostAddress(), port, localAddr, localPort );
                 }
                 socket.setSoTimeout( SO_TIMEOUT );
-*/
-                socket = new Socket();
-                if (localAddr != null)
-                    socket.bind(new InetSocketAddress(localAddr, localPort));
-                socket.connect(new InetSocketAddress(address.getHostAddress(), port), CONN_TIMEOUT);
-                socket.setSoTimeout( SO_TIMEOUT );
-
                 out = socket.getOutputStream();
                 in = socket.getInputStream();
             }
@@ -306,7 +292,7 @@ public class SmbTransport extends Transport implements SmbConstants {
         try {
             super.connect( RESPONSE_TIMEOUT );
         } catch( TransportException te ) {
-            throw new SmbException( "Failed to connect: " + address, te );
+            throw new SmbException( te.getMessage(), te );
         }
     }
     protected void doConnect() throws IOException {
@@ -328,10 +314,8 @@ public class SmbTransport extends Transport implements SmbConstants {
         if( resp.dialectIndex > 10 ) {
             throw new SmbException( "This client does not support the negotiated dialect." );
         }
-        if ((server.capabilities & CAP_EXTENDED_SECURITY) != CAP_EXTENDED_SECURITY &&
-                    server.encryptionKeyLength != 8 &&
-                    LM_COMPATIBILITY == 0) {
-            throw new SmbException("Unexpected encryption key length: " + server.encryptionKeyLength);
+        if (server.encryptionKeyLength != 8 && LM_COMPATIBILITY == 0) {
+            throw new SmbException("Encryption key length is not 8 as expected. This could indicate that the server requires NTLMv2. JCIFS does not fully support NTLMv2 but you can try setting jcifs.smb.lmCompatibility = 3.");
         }
 
         /* Adjust negotiated values */
@@ -346,9 +330,6 @@ public class SmbTransport extends Transport implements SmbConstants {
         if (maxMpxCount < 1) maxMpxCount = 1;
         snd_buf_size = Math.min( snd_buf_size, server.maxBufferSize );
         capabilities &= server.capabilities;
-        if ((server.capabilities & CAP_EXTENDED_SECURITY) == CAP_EXTENDED_SECURITY)
-            capabilities |= CAP_EXTENDED_SECURITY; // & doesn't copy high bit
-
         if ((capabilities & ServerMessageBlock.CAP_UNICODE) == 0) {
             // server doesn't want unicode
             if (FORCE_UNICODE) {
@@ -361,20 +342,15 @@ public class SmbTransport extends Transport implements SmbConstants {
     }
     protected void doDisconnect( boolean hard ) throws IOException {
         ListIterator iter = sessions.listIterator();
-        try {
-            while (iter.hasNext()) {
-                SmbSession ssn = (SmbSession)iter.next();
-                ssn.logoff( hard );
-            }
-            socket.shutdownOutput();
-            out.close();
-            in.close();
-            socket.close();
-        } finally {
-            digest = null;
-            socket = null;
-            tconHostName = null;
+        while (iter.hasNext()) {
+            SmbSession ssn = (SmbSession)iter.next();
+            ssn.logoff( hard );
         }
+        socket.shutdownOutput();
+        out.close();
+        in.close();
+        socket.close();
+        digest = null;
     }
 
     protected void makeKey( Request request ) throws IOException {
@@ -447,9 +423,6 @@ public class SmbTransport extends Transport implements SmbConstants {
                     Hexdump.hexdump( log, BUF, 4, n );
                 }
             }
-            /* For some reason this can sometimes get broken up into another
-             * "NBSS Continuation Message" frame according to WireShark
-             */
             out.write( BUF, 0, 4 + n );
         }
     }
@@ -471,7 +444,6 @@ public class SmbTransport extends Transport implements SmbConstants {
     protected void doRecv( Response response ) throws IOException {
         ServerMessageBlock resp = (ServerMessageBlock)response;
         resp.useUnicode = useUnicode;
-        resp.extendedSecurity = (capabilities & CAP_EXTENDED_SECURITY) == CAP_EXTENDED_SECURITY;
 
         synchronized (BUF) {
             System.arraycopy( sbuf, 0, BUF, 0, 4 + HEADER_LENGTH );
@@ -488,13 +460,10 @@ public class SmbTransport extends Transport implements SmbConstants {
                                     /* WordCount thru dataOffset always 27 */
                 readn( in, BUF, 4 + off, 27 ); off += 27;
                 resp.decode( BUF, 4 );
-                                              /* EMC can send pad w/o data */
-                int pad = r.dataOffset - off;
-                if (r.byteCount > 0 && pad > 0 && pad < 4)
-                    readn( in, BUF, 4 + off, pad);
-
-                if (r.dataLength > 0)
+                if (r.dataLength > 0) {
+                    readn( in, BUF, 4 + off, r.dataOffset - off);   /* pad */
                     readn( in, r.b, r.off, r.dataLength );  /* read direct */
+                }
             } else {
                 readn( in, BUF, 4 + 32, size - 32 );
                 resp.decode( BUF, 4 );
@@ -549,16 +518,11 @@ public class SmbTransport extends Transport implements SmbConstants {
                     throw new SmbException( resp.errorCode, null );
                 }
 
-                DfsReferral dr = getDfsReferrals(req.auth, req.path, 1);
-                if (dr == null)
-                    throw new SmbException(resp.errorCode, null);   
-
-                SmbFile.dfs.insert(req.path, dr);
-                throw dr;
+                DfsReferral[] drs = getDfsReferrals(req.auth, req.path, 1);
+                SmbFile.dfs.insert(req.path, drs[0]);
+                throw drs[0];
             case 0x80000005:  /* STATUS_BUFFER_OVERFLOW */
                 break; /* normal for DCERPC named pipes */
-            case NtStatus.NT_STATUS_MORE_PROCESSING_REQUIRED:
-                break; /* normal for NTLMSSP */
             default:
                 throw new SmbException( resp.errorCode, null );
         }
@@ -607,7 +571,7 @@ public class SmbTransport extends Transport implements SmbConstants {
                         makeKey( req );
                     }
 
-                    synchronized (this) {
+                    synchronized (response_map) {
                         response.received = false;
                         resp.isReceived = false;
                         try {
@@ -628,7 +592,7 @@ public class SmbTransport extends Transport implements SmbConstants {
                             long timeout = RESPONSE_TIMEOUT;
                             resp.expiration = System.currentTimeMillis() + timeout;
                             while( resp.hasMoreElements() ) {
-                                wait( timeout );
+                                response_map.wait( timeout );
                                 timeout = resp.expiration - System.currentTimeMillis();
                                 if (timeout <= 0) {
                                     throw new TransportException( this +
@@ -656,6 +620,8 @@ public class SmbTransport extends Transport implements SmbConstants {
             }
         } catch( SmbException se ) {
             throw se;
+        } catch( InterruptedException ie ) {
+            throw new SmbException( ie.getMessage(), ie );
         } catch( IOException ioe ) {
             throw new SmbException( ioe.getMessage(), ioe );
         }
@@ -695,52 +661,7 @@ public class SmbTransport extends Transport implements SmbConstants {
             result[ri++] = "";
         }
     }
-    DfsReferral getDfsReferrals(NtlmPasswordAuthentication auth,
-                String path,
-                int rn) throws SmbException {
-        SmbTree ipc = getSmbSession( auth ).getSmbTree( "IPC$", null );
-        Trans2GetDfsReferralResponse resp = new Trans2GetDfsReferralResponse();
-        ipc.send( new Trans2GetDfsReferral( path ), resp );
-
-        if (resp.numReferrals == 0) {
-            return null;
-        } else if (rn == 0 || resp.numReferrals < rn) {
-            rn = resp.numReferrals;
-        }
-
-        DfsReferral dr = new DfsReferral();
-
-        String[] arr = new String[4];
-        long expiration = System.currentTimeMillis() + Dfs.TTL * 1000;
-
-        int di = 0;
-        for ( ;; ) {
-                        /* NTLM HTTP Authentication must be re-negotiated
-                         * with challenge from 'server' to access DFS vol. */
-            dr.resolveHashes = auth.hashesExternal;
-            dr.ttl = resp.referrals[di].ttl;
-            dr.expiration = expiration;
-            if (path.equals("")) {
-                dr.server = resp.referrals[di].path.substring(1).toLowerCase();
-            } else {
-                dfsPathSplit(resp.referrals[di].node, arr);
-                dr.server = arr[1];
-                dr.share = arr[2];
-                dr.path = arr[3];
-            }
-            dr.pathConsumed = resp.pathConsumed;
-
-            di++;
-            if (di == rn)
-                break;
-
-            dr.append(new DfsReferral());
-            dr = dr.next;
-        }
-
-        return dr.next;
-    }
-    DfsReferral[] __getDfsReferrals(NtlmPasswordAuthentication auth,
+    DfsReferral[] getDfsReferrals(NtlmPasswordAuthentication auth,
                 String path,
                 int rn) throws SmbException {
         SmbTree ipc = getSmbSession( auth ).getSmbTree( "IPC$", null );
@@ -776,39 +697,38 @@ public class SmbTransport extends Transport implements SmbConstants {
 
         return drs;
     }
+    FileEntry[] getDfsRoots(String domainName, NtlmPasswordAuthentication auth) throws IOException {
+        MsrpcDfsRootEnum rpc;
+        DcerpcHandle handle = null;
 
-//    FileEntry[] getDfsRoots(String domainName, NtlmPasswordAuthentication auth) throws IOException {
-//        MsrpcDfsRootEnum rpc;
-//        DcerpcHandle handle = null;
-//
-//        /* Procedure:
-//         * Lookup a DC in the target domain
-//         * Ask the DC for a referral for the domain (e.g. "\example.com")
-//         * Do NetrDfsEnumEx on the server returned in the referral to
-//         * get roots in target domain
-//         */
-//
-//        UniAddress dc = UniAddress.getByName(domainName);
-//        SmbTransport trans = SmbTransport.getSmbTransport(dc, 0);
-//        DfsReferral[] dr = trans.getDfsReferrals(auth, "\\" + domainName, 1);
-//
-//        handle = DcerpcHandle.getHandle("ncacn_np:" +
-//                    UniAddress.getByName(dr[0].server).getHostAddress() +
-//                    "[\\PIPE\\netdfs]", auth);
-//        try {
-//            rpc = new MsrpcDfsRootEnum(domainName);
-//            handle.sendrecv(rpc);
-//            if (rpc.retval != 0)
-//                throw new SmbException(rpc.retval, true);
-//            return rpc.getEntries();
-//        } finally {
-//            try {
-//                handle.close();
-//            } catch(IOException ioe) {
-//                if (log.level >= 4)
-//                    ioe.printStackTrace(log);
-//            }
-//        }
-//    }
+        /* Procedure:
+         * Lookup a DC in the target domain
+         * Ask the DC for a referral for the domain (e.g. "\example.com")
+         * Do NetrDfsEnumEx on the server returned in the referral to
+         * get roots in target domain
+         */
+
+        UniAddress dc = UniAddress.getByName(domainName);
+        SmbTransport trans = SmbTransport.getSmbTransport(dc, 0);
+        DfsReferral[] dr = trans.getDfsReferrals(auth, "\\" + domainName, 1);
+
+        handle = DcerpcHandle.getHandle("ncacn_np:" +
+                    UniAddress.getByName(dr[0].server).getHostAddress() +
+                    "[\\PIPE\\netdfs]", auth);
+        try {
+            rpc = new MsrpcDfsRootEnum(domainName);
+            handle.sendrecv(rpc);
+            if (rpc.retval != 0)
+                throw new SmbException(rpc.retval, true);
+            return rpc.getEntries();
+        } finally {
+            try {
+                handle.close();
+            } catch(IOException ioe) {
+                if (log.level >= 4)
+                    ioe.printStackTrace(log);
+            }
+        }
+    }
 }
 

@@ -29,10 +29,9 @@ class SmbComTreeConnectAndX extends AndXServerMessageBlock {
 
     private SmbSession session;
     private boolean disconnectTid = false;
-    private String service;
+    private String path, service;
     private byte[] password;
     private int passwordLength;
-    String path;
 
     /* batchLimits indecies
      *

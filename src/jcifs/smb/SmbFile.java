@@ -48,7 +48,7 @@ import java.util.Date;
  * directory. SmbFile URLs have the following syntax:
  *
  * <blockquote><pre>
- *     smb://[[[domain;]username[:password]@]server[:port]/[[share/[dir/]file]]][?param=value[param2=value2[...]]]
+ *     smb://[[[domain;]username[:password]@]server[:port]/[[share/[dir/]file]]][?[param=value[param2=value2[...]]]
  * </pre></blockquote>
  *
  * This example:
@@ -129,7 +129,8 @@ import java.util.Date;
  * <code>smb://workgroup/</code> lists servers, the <code>smb://</code>
  * URL lists all available workgroups on a netbios LAN. Again,
  * in this context many methods are not valid and return default
- * values(e.g. <code>isHidden</code> will always return false).
+ * values(e.g. <code>isHidden</code> and <code>renameTo</code> will always
+ * return false).
  * </td></tr>
  * 
  * <tr><td width="20%"><code>smb://angus.foo.net/d/jcifs/pipes.doc</code></td><td>
@@ -358,7 +359,6 @@ public class SmbFile extends URLConnection implements SmbConstants {
 
     static LogStream log = LogStream.getInstance();
     static long attrExpirationPeriod;
-    static boolean ignoreCopyToException;
 
     static {
 
@@ -368,7 +368,6 @@ public class SmbFile extends URLConnection implements SmbConstants {
             cnfe.printStackTrace();
         }
         attrExpirationPeriod = Config.getLong( "jcifs.smb.client.attrExpirationPeriod", DEFAULT_ATTR_EXPIRATION_PERIOD );
-        ignoreCopyToException = Config.getBoolean( "jcifs.smb.client.ignoreCopyToException", true );
         dfs = new Dfs();
     }
 
@@ -425,7 +424,7 @@ public class SmbFile extends URLConnection implements SmbConstants {
     protected static Dfs dfs;
 
     NtlmPasswordAuthentication auth; // Cannot be null
-    SmbTree tree = null;             // Initially null
+    SmbTree tree = null;             // Initially null; may be !tree.treeConnected
     String unc;                      // Initially null; set by getUncPath; never ends with '/'
     int fid;                         // Initially 0; set by open()
     int type;
@@ -663,83 +662,30 @@ public class SmbFile extends URLConnection implements SmbConstants {
         return blank_resp;
     }
     void resolveDfs(ServerMessageBlock request) throws SmbException {
-        if (request instanceof SmbComClose)
-            return;
-
         connect0();
-
+        String hostName = getServerWithDfs();
         DfsReferral dr = dfs.resolve(
-                    tree.session.transport.tconHostName,
+                    hostName,
                     tree.share,
                     unc,
                     auth);
         if (dr != null) {
-            String service = null;
+            UniAddress addr;
+            SmbTransport trans;
 
-            if (request != null) {
-                switch( request.command ) {
-                    case ServerMessageBlock.SMB_COM_TRANSACTION:
-                    case ServerMessageBlock.SMB_COM_TRANSACTION2:
-                        switch( ((SmbComTransaction)request).subCommand & 0xFF ) {
-                            case SmbComTransaction.TRANS2_GET_DFS_REFERRAL:
-                                break;
-                            default:
-                                service = "A:";
-                        }
-                        break;
-                    default:
-                        service = "A:";
-                }
+            try {
+                addr = UniAddress.getByName( dr.server );
+            } catch( UnknownHostException uhe ) {
+                throw new SmbException( dr.server, uhe );
             }
 
-            DfsReferral start = dr;
-            SmbException se = null;
-
-            do {
-                try {
-                    if (log.level >= 2)
-                        log.println("DFS redirect: " + dr);
-
-                    UniAddress addr = UniAddress.getByName(dr.server);
-                    SmbTransport trans = SmbTransport.getSmbTransport(addr, url.getPort());
-                    /* This is a key point. This is where we set the "tree" of this file which
-                     * is like changing the rug out from underneath our feet.
-                     */
-/* Technically we should also try to authenticate here but that means doing the session setup and tree connect separately. For now a simple connect will at least tell us if the host is alive. That should be sufficient for 99% of the cases. We can revisit this again for 2.0.
- */
-                    trans.connect();
-                    tree = trans.getSmbSession( auth ).getSmbTree( dr.share, service );
-
-                    if (dr != start && dr.key != null) {
-                        dr.map.put(dr.key, dr);
-                    }
-
-                    se = null;
-
-                    break;
-                } catch (IOException ioe) {
-                    if (ioe instanceof SmbException) {
-                        se = (SmbException)ioe;
-                    } else {
-                        se = new SmbException(dr.server, ioe);
-                    }
-                }
-
-                dr = dr.next;
-            } while (dr != start);
-
-            if (se != null)
-                throw se;
+            trans = SmbTransport.getSmbTransport( addr, url.getPort() );
+            tree = trans.getSmbSession( auth ).getSmbTree( dr.share, null );
 
             if (log.level >= 3)
                 log.println( dr );
 
             dfsReferral = dr;
-            if (dr.pathConsumed < 0) {
-                dr.pathConsumed = 0;
-            } else if (dr.pathConsumed > unc.length()) {
-                dr.pathConsumed = unc.length();
-            }
             String dunc = unc.substring(dr.pathConsumed);
             if (dunc.equals(""))
                 dunc = "\\";
@@ -836,13 +782,6 @@ int addressIndex;
                 addresses[0] = UniAddress.getByName( server );
                 return getNextAddress();
             }
-            String address = queryLookup(query, "address");
-            if (address != null && address.length() > 0) {
-                byte[] ip = java.net.InetAddress.getByName(address).getAddress();
-                addresses = new UniAddress[1];
-                addresses[0] = new UniAddress(java.net.InetAddress.getByAddress(host, ip));
-                return getNextAddress();
-            }
         }
 
         if (host.length() == 0) {
@@ -901,7 +840,7 @@ int addressIndex;
         String hostName = getServerWithDfs();
         tree.inDomainDfs = dfs.resolve(hostName, tree.share, null, auth) != null;
         if (tree.inDomainDfs) {
-            tree.connectionState = 2;
+            tree.treeConnected = true;
         }
 
         try {
@@ -924,7 +863,7 @@ int addressIndex;
                 tree = ssn.getSmbTree(share, null);
                 tree.inDomainDfs = dfs.resolve(hostName, tree.share, null, auth) != null;
                 if (tree.inDomainDfs) {
-                    tree.connectionState = 2;
+                    tree.treeConnected = true;
                 }
                 tree.treeConnect(null, null);
             } else {
@@ -939,12 +878,9 @@ int addressIndex;
  * <tt>URLConnection</tt> implementation of <tt>connect()</tt>.
  */
     public void connect() throws IOException {
-        if (isConnected() && tree.session.transport.tconHostName == null) {
-            /* Tree thinks it is connected but transport disconnected
-             * under it, reset tree to reflect the truth.
-             */
-            tree.treeDisconnect(true);
-        }
+        SmbTransport trans;
+        SmbSession ssn;
+        UniAddress addr;
 
         if( isConnected() ) {
             return;
@@ -956,8 +892,6 @@ int addressIndex;
             try {
                 doConnect();
                 return;
-            } catch(SmbAuthException sae) {
-                throw sae; // Prevents account lockout on servers with multiple IPs
             } catch(SmbException se) {
                 if (getNextAddress() == null) 
                     throw se;
@@ -967,7 +901,7 @@ int addressIndex;
         }
     }
     boolean isConnected() {
-        return tree != null && tree.connectionState == 2;
+        return tree != null && tree.treeConnected;
     }
     int open0( int flags, int access, int attrs, int options ) throws SmbException {
         int f;
@@ -1011,7 +945,7 @@ if (this instanceof SmbNamedPipe) {
         tree_num = tree.tree_num;
     }
     boolean isOpen() {
-        boolean ans = opened && isConnected() && tree_num == tree.tree_num;
+        boolean ans =  opened && isConnected() && tree_num == tree.tree_num;
         return ans;
     }
     void close( int f, long lastWriteTime ) throws SmbException {
@@ -2051,6 +1985,7 @@ if (this instanceof SmbNamedPipe) {
  * new <tt>SmbFile</tt></i>.
  *
  * @param  dest  An <code>SmbFile</code> that represents the new pathname
+ * @return <code>true</code> if the file or directory was successfully renamed
  * @throws NullPointerException
  *         If the <code>dest</code> argument is <code>null</code>
  */
@@ -2081,8 +2016,7 @@ if (this instanceof SmbNamedPipe) {
 
     class WriterThread extends Thread {
         byte[] b;
-        int n;
-        long off;
+        int n, off;
         boolean ready;
         SmbFile dest;
         SmbException e = null;
@@ -2104,7 +2038,7 @@ if (this instanceof SmbNamedPipe) {
             ready = false;
         }
 
-        synchronized void write( byte[] b, int n, SmbFile dest, long off ) {
+        synchronized void write( byte[] b, int n, SmbFile dest, int off ) {
             this.b = b;
             this.n = n;
             this.dest = dest;
@@ -2200,7 +2134,7 @@ if (this instanceof SmbNamedPipe) {
                 throw new SmbException( url.toString(), mue );
             }
         } else {
-            long off;
+            int off;
 
             try {
                 open( SmbFile.O_RDONLY, 0, ATTR_NORMAL, 0 );
@@ -2221,8 +2155,7 @@ if (this instanceof SmbNamedPipe) {
                     }
                 }
     
-                i = 0;
-                off = 0L;
+                i = off = 0;
                 for( ;; ) {
                     req.setParam( fid, off, bsize );
                     resp.setParam( b[i], 0 );
@@ -2256,13 +2189,9 @@ if (this instanceof SmbNamedPipe) {
                         dest.fid, attributes, createTime, lastModified ),
                         new Trans2SetFileInformationResponse() );
                 dest.close( 0L );
-            } catch( SmbException se ) {
-
-                if (ignoreCopyToException == false)
-                    throw new SmbException("Failed to copy file from [" + this.toString() + "] to [" + dest.toString() + "]", se);
-
+            } catch( Exception ex ) {
                 if( log.level > 1 )
-                    se.printStackTrace( log );
+                    ex.printStackTrace( log );
             } finally {
                 close();
             }
@@ -2868,7 +2797,7 @@ if (this instanceof SmbNamedPipe) {
                 sids[ai] = aces[ai].sid;
             }
 
-            for (int off = 0; off < sids.length; off += 64) {
+            for (int off = 0; off < sids.length; off += 10) {
                 int len = sids.length - off;
                 if (len > 64)
                     len = 64;

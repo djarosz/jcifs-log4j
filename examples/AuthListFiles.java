@@ -30,17 +30,22 @@ public class AuthListFiles extends NtlmAuthenticator {
 
     protected NtlmPasswordAuthentication getNtlmPasswordAuthentication() {
         System.out.println( getRequestingException().getMessage() + " for " + getRequestingURL() );
+        System.out.print( "username: " );
         try {
-            System.out.print( "username: " );
+            int i;
             String username = readLine();
+            String domain = null, password;
 
+            if(( i = username.indexOf( '\\' )) != -1 ) {
+                domain = username.substring( 0, i );
+                username = username.substring( i + 1 );
+            }
             System.out.print( "password: " );
-            String password = readLine();
-
+            password = readLine();
             if( password.length() == 0 ) {
                 return null;
             }
-            return new NtlmPasswordAuthentication( null, username, password );
+            return new NtlmPasswordAuthentication( domain, username, password );
         } catch( Exception e ) {
         }
         return null;

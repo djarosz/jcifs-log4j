@@ -54,7 +54,7 @@ public class Type2Message extends NtlmMessage {
         byte[] domain = new byte[0];
         if (DEFAULT_DOMAIN != null) {
             try {
-                domain = DEFAULT_DOMAIN.getBytes(UNI_ENCODING);
+                domain = DEFAULT_DOMAIN.getBytes("UnicodeLittleUnmarked");
             } catch (IOException ex) { }
         }
         int domainLength = domain.length;
@@ -63,7 +63,7 @@ public class Type2Message extends NtlmMessage {
             String host = NbtAddress.getLocalHost().getHostName();
             if (host != null) {
                 try {
-                    server = host.getBytes(UNI_ENCODING);
+                    server = host.getBytes("UnicodeLittleUnmarked");
                 } catch (IOException ex) { }
             }
         } catch (UnknownHostException ex) { }
@@ -231,17 +231,21 @@ public class Type2Message extends NtlmMessage {
             byte[] targetInformation = getTargetInformation();
             int flags = getFlags();
             byte[] target = new byte[0];
-            if ((flags & NTLMSSP_REQUEST_TARGET) != 0) {
+            if ((flags & (NTLMSSP_TARGET_TYPE_DOMAIN |
+                    NTLMSSP_TARGET_TYPE_SERVER |
+                            NTLMSSP_TARGET_TYPE_SHARE)) != 0) {
                 if (targetName != null && targetName.length() != 0) {
                     target = (flags & NTLMSSP_NEGOTIATE_UNICODE) != 0 ?
-                            targetName.getBytes(UNI_ENCODING) :
+                            targetName.getBytes("UnicodeLittleUnmarked") :
                             targetName.toUpperCase().getBytes(getOEMEncoding());
                 } else {
-                    flags &= (0xffffffff ^ NTLMSSP_REQUEST_TARGET);
+                    flags &= (0xffffffff ^ (NTLMSSP_TARGET_TYPE_DOMAIN |
+                            NTLMSSP_TARGET_TYPE_SERVER |
+                                    NTLMSSP_TARGET_TYPE_SHARE));
                 }
             }
             if (targetInformation != null) {
-                flags |= NTLMSSP_NEGOTIATE_TARGET_INFO;
+                flags ^= NTLMSSP_NEGOTIATE_TARGET_INFO;
                 // empty context is needed for padding when t.i. is supplied.
                 if (context == null) context = new byte[8];
             }
@@ -272,12 +276,53 @@ public class Type2Message extends NtlmMessage {
         byte[] challenge = getChallenge();
         byte[] context = getContext();
         byte[] targetInformation = getTargetInformation();
-
-        return "Type2Message[target=" + target +
-            ",challenge=" + (challenge == null ? "null" : "<" + challenge.length + " bytes>") +
-            ",context=" + (context == null ? "null" : "<" + context.length + " bytes>") +
-            ",targetInformation=" + (targetInformation == null ? "null" : "<" + targetInformation.length + " bytes>") +
-            ",flags=0x" + jcifs.util.Hexdump.toHexString(getFlags(), 8) + "]";
+        int flags = getFlags();
+        StringBuffer buffer = new StringBuffer();
+        if (target != null) {
+            buffer.append("target: ").append(target);
+        }
+        if (challenge != null) {
+            if (buffer.length() > 0) buffer.append("; ");
+            buffer.append("challenge: ");
+            buffer.append("0x");
+            for (int i = 0; i < challenge.length; i++) {
+                buffer.append(Integer.toHexString((challenge[i] >> 4) & 0x0f));
+                buffer.append(Integer.toHexString(challenge[i] & 0x0f));
+            }
+        }
+        if (context != null) {
+            if (buffer.length() > 0) buffer.append("; ");
+            buffer.append("context: ");
+            buffer.append("0x");
+            for (int i = 0; i < context.length; i++) {
+                buffer.append(Integer.toHexString((context[i] >> 4) & 0x0f));
+                buffer.append(Integer.toHexString(context[i] & 0x0f));
+            }
+        }
+        if (targetInformation != null) {
+            if (buffer.length() > 0) buffer.append("; ");
+            buffer.append("targetInformation: ");
+            buffer.append("0x");
+            for (int i = 0; i < targetInformation.length; i++) {
+                buffer.append(Integer.toHexString((targetInformation[i] >> 4) &
+                        0x0f));
+                buffer.append(Integer.toHexString(targetInformation[i] & 0x0f));
+            }
+        }
+        if (flags != 0) {
+            if (buffer.length() > 0) buffer.append("; ");
+            buffer.append("flags: ");
+            buffer.append("0x");
+            buffer.append(Integer.toHexString((flags >> 28) & 0x0f));
+            buffer.append(Integer.toHexString((flags >> 24) & 0x0f));
+            buffer.append(Integer.toHexString((flags >> 20) & 0x0f));
+            buffer.append(Integer.toHexString((flags >> 16) & 0x0f));
+            buffer.append(Integer.toHexString((flags >> 12) & 0x0f));
+            buffer.append(Integer.toHexString((flags >> 8) & 0x0f));
+            buffer.append(Integer.toHexString((flags >> 4) & 0x0f));
+            buffer.append(Integer.toHexString(flags & 0x0f));
+        }
+        return buffer.toString();
     }
 
     /**
@@ -340,7 +385,7 @@ public class Type2Message extends NtlmMessage {
         if (bytes.length != 0) {
             target = new String(bytes,
                     ((flags & NTLMSSP_NEGOTIATE_UNICODE) != 0) ?
-                            UNI_ENCODING : getOEMEncoding());
+                            "UnicodeLittleUnmarked" : getOEMEncoding());
         }
         setTarget(target);
         for (int i = 24; i < 32; i++) {

@@ -176,7 +176,7 @@ abstract class ServerMessageBlock extends Response implements Request, SmbConsta
         flags2,
         tid, pid, uid, mid,
         wordCount, byteCount;
-    boolean useUnicode, received, extendedSecurity;
+    boolean useUnicode, received;
     long responseTimeout = 1;
     int signSeq;
     boolean verifyFailed;
@@ -210,7 +210,7 @@ abstract class ServerMessageBlock extends Response implements Request, SmbConsta
                 if((( dstIndex - headerStart ) % 2 ) != 0 ) {
                     dst[dstIndex++] = (byte)'\0';
                 }
-                System.arraycopy( str.getBytes( UNI_ENCODING ), 0,
+                System.arraycopy( str.getBytes( "UnicodeLittleUnmarked" ), 0,
                                     dst, dstIndex, str.length() * 2 );
                 dstIndex += str.length() * 2;
                 dst[dstIndex++] = (byte)'\0';
@@ -249,7 +249,7 @@ Hexdump.hexdump( System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128 );
                         throw new RuntimeException( "zero termination not found" );
                     }
                 }
-                str = new String( src, srcIndex, len, UNI_ENCODING );
+                str = new String( src, srcIndex, len, "UnicodeLittleUnmarked" );
             } else {
                 while( src[srcIndex + len] != (byte)0x00 ) {
                     len++;
@@ -260,45 +260,6 @@ Hexdump.hexdump( System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128 );
                     }
                 }
                 str = new String( src, srcIndex, len, OEM_ENCODING );
-            }
-        } catch( UnsupportedEncodingException uee ) {
-            if( log.level > 1 )
-                uee.printStackTrace( log );
-        }
-        return str;
-    }
-    String readString(byte[] src, int srcIndex, int srcEnd, int maxLen, boolean useUnicode) {
-        int len = 0;
-        String str = null;
-        try {
-            if (useUnicode) {
-                // Unicode requires word alignment
-                if (((srcIndex - headerStart) % 2) != 0) {
-                    srcIndex++;
-                }
-                for (len = 0; (srcIndex + len + 1) < srcEnd; len += 2) {
-                    if (src[srcIndex + len] == (byte)0x00 && src[srcIndex + len + 1] == (byte)0x00) {
-                        break;
-                    }
-                    if (len > maxLen) {
-                        if (log.level > 0)
-                            Hexdump.hexdump(System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128);
-                        throw new RuntimeException("zero termination not found");
-                    }
-                }
-                str = new String(src, srcIndex, len, UNI_ENCODING);
-            } else {
-                for (len = 0; srcIndex < srcEnd; len++) {
-                    if (src[srcIndex + len] == (byte)0x00) {
-                        break;
-                    }
-                    if (len > maxLen) {
-                        if (log.level > 0)
-                            Hexdump.hexdump(System.err, src, srcIndex, maxLen < 128 ? maxLen + 8 : 128);
-                        throw new RuntimeException("zero termination not found");
-                    }
-                }
-                str = new String(src, srcIndex, len, OEM_ENCODING);
             }
         } catch( UnsupportedEncodingException uee ) {
             if( log.level > 1 )

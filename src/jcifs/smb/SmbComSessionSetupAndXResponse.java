@@ -27,7 +27,6 @@ class SmbComSessionSetupAndXResponse extends AndXServerMessageBlock {
     private String primaryDomain = "";
 
     boolean isLoggedInAsGuest;
-    byte[] blob = null;
 
     SmbComSessionSetupAndXResponse( ServerMessageBlock andx ) {
         super( andx );
@@ -40,30 +39,41 @@ class SmbComSessionSetupAndXResponse extends AndXServerMessageBlock {
         return 0;
     }
     int readParameterWordsWireFormat( byte[] buffer, int bufferIndex ) {
-        int start = bufferIndex;
         isLoggedInAsGuest = ( buffer[bufferIndex] & 0x01 ) == 0x01 ? true : false;
-        bufferIndex += 2;
-        if (extendedSecurity) {
-            int blobLength = readInt2(buffer, bufferIndex);
-            bufferIndex += 2;
-            blob = new byte[blobLength];
-        }
-        return bufferIndex - start;
+        return 2;
     }
     int readBytesWireFormat( byte[] buffer, int bufferIndex ) {
         int start = bufferIndex;
 
-        if (extendedSecurity) {
-            System.arraycopy(buffer, bufferIndex, blob, 0, blob.length);
-            bufferIndex += blob.length;
-        }
         nativeOs = readString( buffer, bufferIndex );
         bufferIndex += stringWireLength( nativeOs, bufferIndex );
-        nativeLanMan = readString( buffer, bufferIndex, start + byteCount, 255, useUnicode );
+        nativeLanMan = readString( buffer, bufferIndex );
         bufferIndex += stringWireLength( nativeLanMan, bufferIndex );
-        if (!extendedSecurity) {
-            primaryDomain = readString(buffer, bufferIndex, start + byteCount, 255, useUnicode);
-            bufferIndex += stringWireLength(primaryDomain, bufferIndex);
+
+        if( useUnicode ) {
+            int len;
+
+            if((( bufferIndex - headerStart ) % 2 ) != 0 ) {
+                bufferIndex++;
+            }
+
+            len = 0;
+            while( buffer[bufferIndex + len] != (byte)0x00 ) {
+                len += 2;
+                if( len > 256 ) {
+                    throw new RuntimeException( "zero termination not found" );
+                }
+            }
+            try {
+                primaryDomain = new String( buffer, bufferIndex, len, "UnicodeLittle" );
+            } catch( UnsupportedEncodingException uee ) {
+                if( log.level > 1 )
+                    uee.printStackTrace( log );
+            }
+            bufferIndex += len;
+        } else {
+            primaryDomain = readString( buffer, bufferIndex );
+            bufferIndex += stringWireLength( primaryDomain, bufferIndex );
         }
 
         return bufferIndex - start;

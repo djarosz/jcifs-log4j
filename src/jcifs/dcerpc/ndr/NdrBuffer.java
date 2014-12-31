@@ -96,9 +96,6 @@ public class NdrBuffer {
     public int getLength() {
         return deferred.length;
     }
-    public void setLength(int length) {
-        deferred.length = length;
-    }
     public void advance(int n) {
         index += n;
         if ((index - start) > deferred.length) {
@@ -164,7 +161,7 @@ public class NdrBuffer {
         Encdec.enc_uint32le(0, buf, i); i += 4;
         Encdec.enc_uint32le(len + 1, buf, i); i += 4;
         try {
-            System.arraycopy(s.getBytes("UTF-16LE"), 0, buf, i, len * 2);
+            System.arraycopy(s.getBytes("UnicodeLittleUnmarked"), 0, buf, i, len * 2);
         } catch( UnsupportedEncodingException uee ) {
         }
         i += len * 2;
@@ -183,7 +180,7 @@ public class NdrBuffer {
             int size = len * 2;
             try {
                 if (size < 0 || size > 0xFFFF) throw new NdrException( NdrException.INVALID_CONFORMANCE );
-                val = new String(buf, i, size, "UTF-16LE");
+                val = new String(buf, i, size, "UnicodeLittleUnmarked");
                 i += size + 2;
             } catch( UnsupportedEncodingException uee ) {
             }

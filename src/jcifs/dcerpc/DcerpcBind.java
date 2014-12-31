@@ -44,8 +44,6 @@ public class DcerpcBind extends DcerpcMessage {
     DcerpcBinding binding;
     int max_xmit, max_recv;
 
-    public DcerpcBind() {
-    }
     DcerpcBind(DcerpcBinding binding, DcerpcHandle handle) {
         this.binding = binding;
         max_xmit = handle.max_xmit;

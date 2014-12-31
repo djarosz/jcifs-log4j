@@ -1,6 +1,6 @@
 /* jcifs msrpc client library in Java
  * Copyright (C) 2006  "Michael B. Allen" <jcifs at samba dot org>
- *                   "Eric Glass" <jcifs at samba dot org>
+ *                     "Eric Glass" <jcifs at samba dot org>
  * 
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -106,7 +106,6 @@ public abstract class DcerpcHandle implements DcerpcConstants {
     protected int max_xmit = 4280;
     protected int max_recv = max_xmit;
     protected int state = 0;
-    protected DcerpcSecurityProvider securityProvider = null;
     private static int call_id = 1;
 
     public static DcerpcHandle getHandle(String url,
@@ -118,18 +117,6 @@ public abstract class DcerpcHandle implements DcerpcConstants {
         throw new DcerpcException("DCERPC transport not supported: " + url);
     }
 
-    public void bind() throws DcerpcException, IOException {
-synchronized (this) {
-        try {
-            state = 1;
-            DcerpcMessage bind = new DcerpcBind(binding, this);
-            sendrecv(bind);
-        } catch (IOException ioe) {
-            state = 0;
-            throw ioe;
-        }
-}
-    }
     public void sendrecv(DcerpcMessage msg) throws DcerpcException, IOException {
         byte[] stub, frag;
         NdrBuffer buf, fbuf;
@@ -137,70 +124,53 @@ synchronized (this) {
         DcerpcException de;
 
         if (state == 0) {
-            bind();
+            state = 1;
+            DcerpcMessage bind = new DcerpcBind(binding, this);
+            sendrecv(bind);
         }
 
-        isDirect = true;
+        isDirect = msg instanceof DcerpcBind;
 
-        stub = jcifs.smb.BufferCache.getBuffer();
+        try {
+            stub = jcifs.smb.BufferCache.getBuffer();
+        } catch (InterruptedException ie) {
+            throw new IOException(ie.getMessage());
+        }
         try {
             int off, tot, n;
 
             buf = new NdrBuffer(stub, 0);
 
             msg.flags = DCERPC_FIRST_FRAG | DCERPC_LAST_FRAG;
-            msg.call_id = call_id++;
+            msg.call_id = call_id;
 
             msg.encode(buf);
 
-            if (securityProvider != null) {
-                buf.setIndex(0);
-                securityProvider.wrap(buf);
-            }
-
-            tot = buf.getLength() - 24;
+            tot = buf.getLength();
             off = 0;
-
             while (off < tot) {
-                n = tot - off;
+                msg.call_id = call_id++;
 
-                if ((24 + n) > max_xmit) {
+                if ((tot - off) > max_xmit) {
+                    /* Multiple fragments. Need to set flags and length
+                     * and re-encode header
+                    msg.length = n = max_xmit;
                     msg.flags &= ~DCERPC_LAST_FRAG;
-                    n = max_xmit - 24;
-                } else {
-                    msg.flags |= DCERPC_LAST_FRAG;
-                    isDirect = false;
-                    msg.alloc_hint = n;
-                }
-
-                msg.length = 24 + n;
-
-                if (off > 0)
-                    msg.flags &= ~DCERPC_FIRST_FRAG;
-
-                if ((msg.flags & (DCERPC_FIRST_FRAG | DCERPC_LAST_FRAG)) != (DCERPC_FIRST_FRAG | DCERPC_LAST_FRAG)) {
                     buf.start = off;
                     buf.reset();
                     msg.encode_header(buf);
-                    buf.enc_ndr_long(msg.alloc_hint);
-                    buf.enc_ndr_short(0); /* context id */
-                    buf.enc_ndr_short(msg.getOpnum());
+                     */
+                    throw new DcerpcException("Fragmented request PDUs currently not supported");
+                } else {
+                    n = tot - off;
                 }
 
-                doSendFragment(stub, off, msg.length, isDirect);
+                doSendFragment(stub, off, n, isDirect);
                 off += n;
             }
 
             doReceiveFragment(stub, isDirect);
             buf.reset();
-            buf.setIndex(8);
-            buf.setLength(buf.dec_ndr_short());
-
-            if (securityProvider != null)
-                securityProvider.unwrap(buf);
-
-            buf.setIndex(0);
-
             msg.decode_header(buf);
 
             off = 24;
@@ -218,13 +188,6 @@ synchronized (this) {
                 }
 
                 doReceiveFragment(frag, isDirect);
-                fbuf.reset();
-                fbuf.setIndex(8);
-                fbuf.setLength(fbuf.dec_ndr_short());
-
-                if (securityProvider != null)
-                    securityProvider.unwrap(fbuf);
-
                 fbuf.reset();
                 msg.decode_header(fbuf);
                 stub_frag_len = msg.length - 24;
@@ -250,10 +213,6 @@ synchronized (this) {
             throw de;
     }
 
-    public void setDcerpcSecurityProvider(DcerpcSecurityProvider securityProvider)
-    {
-        this.securityProvider = securityProvider;
-    }
     public String getServer() {
         if (this instanceof DcerpcPipeHandle)
             return ((DcerpcPipeHandle)this).pipe.getServer();

@@ -66,48 +66,40 @@ class SmbComNegotiateResponse extends ServerMessageBlock {
                                     int bufferIndex ) {
         int start = bufferIndex;
 
-        if ((server.capabilities & CAP_EXTENDED_SECURITY) == 0) {
-            server.encryptionKey = new byte[server.encryptionKeyLength];
-            System.arraycopy( buffer, bufferIndex,
-                    server.encryptionKey, 0, server.encryptionKeyLength );
-            bufferIndex += server.encryptionKeyLength;
-            if( byteCount > server.encryptionKeyLength ) {
-                int len = 0;
-// TODO: we can use new string routine here
-                try {
-                    if(( flags2 & FLAGS2_UNICODE ) == FLAGS2_UNICODE ) {
-                        while( buffer[bufferIndex + len] != (byte)0x00 ||
-                                        buffer[bufferIndex + len + 1] != (byte)0x00 ) {
-                            len += 2;
-                            if( len > 256 ) {
-                                throw new RuntimeException( "zero termination not found" );
-                            }
+        server.encryptionKey = new byte[server.encryptionKeyLength];
+        System.arraycopy( buffer, bufferIndex,
+                server.encryptionKey, 0, server.encryptionKeyLength );
+        bufferIndex += server.encryptionKeyLength;
+        if( byteCount > server.encryptionKeyLength ) {
+            int len = 0;
+            try {
+                if(( flags2 & FLAGS2_UNICODE ) == FLAGS2_UNICODE ) {
+                    while( buffer[bufferIndex + len] != (byte)0x00 ||
+                                    buffer[bufferIndex + len + 1] != (byte)0x00 ) {
+                        len += 2;
+                        if( len > 256 ) {
+                            throw new RuntimeException( "zero termination not found" );
                         }
-                        server.oemDomainName = new String( buffer, bufferIndex,
-                                len, UNI_ENCODING );
-                    } else {
-                        while( buffer[bufferIndex + len] != (byte)0x00 ) {
-                            len++;
-                            if( len > 256 ) {
-                                throw new RuntimeException( "zero termination not found" );
-                            }
-                        }
-                        server.oemDomainName = new String( buffer, bufferIndex,
-                                len, ServerMessageBlock.OEM_ENCODING );
                     }
-                } catch( UnsupportedEncodingException uee ) {
-                    if( log.level > 1 )
-                        uee.printStackTrace( log );
+                    server.oemDomainName = new String( buffer, bufferIndex,
+                            len, "UnicodeLittleUnmarked" );
+                } else {
+                    while( buffer[bufferIndex + len] != (byte)0x00 ) {
+                        len++;
+                        if( len > 256 ) {
+                            throw new RuntimeException( "zero termination not found" );
+                        }
+                    }
+                    server.oemDomainName = new String( buffer, bufferIndex,
+                            len, ServerMessageBlock.OEM_ENCODING );
                 }
-                bufferIndex += len;
-            } else {
-                server.oemDomainName = new String();
+            } catch( UnsupportedEncodingException uee ) {
+                if( log.level > 1 )
+                    uee.printStackTrace( log );
             }
+            bufferIndex += len;
         } else {
-            server.guid = new byte[16];
-            System.arraycopy(buffer, bufferIndex, server.guid, 0, 16); 
             server.oemDomainName = new String();
-            // ignore SPNEGO token for now ...
         }
 
         return bufferIndex - start;
@@ -130,6 +122,9 @@ class SmbComNegotiateResponse extends ServerMessageBlock {
             ",serverTimeZone="      + server.serverTimeZone +
             ",encryptionKeyLength=" + server.encryptionKeyLength +
             ",byteCount="           + byteCount +
+            ",encryptionKey=0x"     + Hexdump.toHexString( server.encryptionKey,
+                                                0,
+                                                server.encryptionKeyLength * 2 ) +
             ",oemDomainName="       + server.oemDomainName + "]" );
     }
 }

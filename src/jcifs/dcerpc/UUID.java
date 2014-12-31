@@ -64,20 +64,6 @@ public class UUID extends rpc.uuid_t {
     private static byte B(int i) { return (byte)(i & 0xFF); }
     private static short S(int i) { return (short)(i & 0xFFFF); }
 
-    public UUID(rpc.uuid_t uuid) {
-        time_low = uuid.time_low;
-        time_mid = uuid.time_mid;
-        time_hi_and_version = uuid.time_hi_and_version;
-        clock_seq_hi_and_reserved = uuid.clock_seq_hi_and_reserved;
-        clock_seq_low = uuid.clock_seq_low;
-        node = new byte[6];
-        node[0] = uuid.node[0];
-        node[1] = uuid.node[1];
-        node[2] = uuid.node[2];
-        node[3] = uuid.node[3];
-        node[4] = uuid.node[4];
-        node[5] = uuid.node[5];
-    }
     public UUID(String str) {
         char[] arr = str.toCharArray();
         time_low = hex_to_bin(arr, 0, 8);

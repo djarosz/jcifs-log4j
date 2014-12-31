@@ -18,8 +18,6 @@
 
 package jcifs.smb;
 
-import java.util.Map;
-
 public class DfsReferral extends SmbException {
 
     public int pathConsumed;
@@ -30,21 +28,6 @@ public class DfsReferral extends SmbException {
     public String path;     // Path relative to tree from which this referral was thrown
     public boolean resolveHashes;
     public long expiration;
-
-    DfsReferral next;
-    Map map;
-    String key = null;
-
-    public DfsReferral()
-    {
-        this.next = this;
-    }
-
-    void append(DfsReferral dr)
-    {
-        dr.next = next;
-        next = dr;
-    }
 
     public String toString() {
         return "DfsReferral[pathConsumed=" + pathConsumed +

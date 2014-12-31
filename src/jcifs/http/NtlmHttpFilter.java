@@ -60,17 +60,10 @@ public class NtlmHttpFilter implements Filter {
         String name;
         int level;
 
-        /* Set jcifs properties we know we want; soTimeout and cachePolicy to 30min.
+        /* Set jcifs properties we know we want; soTimeout and cachePolicy to 10min.
          */
-        Config.setProperty( "jcifs.smb.client.soTimeout", "1800000" );
+        Config.setProperty( "jcifs.smb.client.soTimeout", "300000" );
         Config.setProperty( "jcifs.netbios.cachePolicy", "1200" );
-        /* The Filter can only work with NTLMv1 as it uses a man-in-the-middle
-         * techinque that NTLMv2 specifically thwarts. A real NTLM Filter would
-         * need to do a NETLOGON RPC that JCIFS will likely never implement
-         * because it requires a lot of extra crypto not used by CIFS.
-         */
-        Config.setProperty( "jcifs.smb.lmCompatibility", "0" );
-        Config.setProperty( "jcifs.smb.client.useExtendedSecurity", "false" );
 
         Enumeration e = filterConfig.getInitParameterNames();
         while( e.hasMoreElements() ) {

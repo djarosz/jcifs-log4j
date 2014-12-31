@@ -48,14 +48,14 @@ public class DcerpcException extends IOException implements DcerpcError, WinErro
     private int error;
     private Throwable rootCause;
 
+    DcerpcException(String msg) {
+        super(msg);
+    }
     DcerpcException(int error) {
         super(getMessageByDcerpcError(error));
         this.error = error;
     }
-    public DcerpcException(String msg) {
-        super(msg);
-    }
-    public DcerpcException(String msg, Throwable rootCause) {
+    DcerpcException(String msg, Throwable rootCause) {
         super(msg);
         this.rootCause = rootCause;
     }

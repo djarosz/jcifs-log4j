@@ -1,30 +1,22 @@
 #!/bin/sh
 
-JAVA_HOME=/usr/local/java5
+JAVA_HOME=/usr/local/java
 CLASSPATH=../build:.
 PROPERTIES=../../user2.prp
 RUN="${JAVA_HOME}/bin/java -cp ${CLASSPATH} -Djcifs.properties=${PROPERTIES}"
 
-#SERVER=192.168.15.110
-SERVER=dc1.w.net
-SHARE=tmp
-DIR=test
-
-# Domain-based DFS
-#SERVER=192.168.15.110
-#SERVER=w.net
-#SHARE=root2
+#SERVER=dc1.w.net
+#SHARE=tmp
 #DIR=test
 
-# smb://fs4.w.net/DFSStandaloneRoot/DFSStandaloneLink/test/
-# smb://dc1.w.net/root2/link2/test/
-# smb://dc1.w.net/tmp/test/
-# smb://dc3.x.net/tmp/test/
+# Domain-based DFS
+#SHARE=root2
+#DIR=link2/test
+
 # Stand-alone DFS
-#SERVER=192.168.15.113
-#SERVER=fs1.w.net
-#SHARE=DFSStandaloneRoot
-#DIR=DFSStandaloneLink/test
+SERVER=fs1.w.net
+SHARE=standalone
+DIR=sub1/dc1tmp/test
 
 WRITE_DIR=${DIR}/
 SRC_DIR=${DIR}/Junk
@@ -35,13 +27,6 @@ URL_WRITE_DIR=${URL_SHARE}${WRITE_DIR}
 
 set -x
 
-$RUN SidLookup dc1.w.net S-1-5-21-2779991279-2625083122-3494051191-1361
-$RUN TestGetParent 'smb://'
-$RUN TestGetParent ${URL_WRITE_DIR}
-$RUN TestListLoop 'smb://dc5.w.net/tmp/' 2
-$RUN TestCopy smb://fs1.w.net/tmp/xxx/ smb://dc5.w.net/tmp/deleteme/
-$RUN ListFiles smb://
-$RUN ListFiles smb://192.168.15.110/tmp/
 $RUN ListACL ${URL_WRITE_DIR}
 $RUN LargeListFiles ${URL_WRITE_DIR}
 $RUN CountPerms ${URL_WRITE_DIR} 100

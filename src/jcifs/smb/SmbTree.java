@@ -28,20 +28,14 @@ class SmbTree {
 
     private static int tree_conn_counter;
 
-    /* 0 - not connected
-     * 1 - connecting
-     * 2 - connected
-     * 3 - disconnecting
-     */
-    int connectionState;
-    int tid;
+    private int tid;
 
     String share;
     String service = "?????";
     String service0;
     SmbSession session;
-    boolean inDfs, inDomainDfs;
-    int tree_num; // used by SmbFile.isOpen
+    boolean treeConnected, inDfs, inDomainDfs;
+    int tree_num;
 
     SmbTree( SmbSession session, String share, String service ) {
         this.session = session;
@@ -50,7 +44,6 @@ class SmbTree {
             this.service = service;
         }
         this.service0 = this.service;
-        this.connectionState = 0;
     }
 
     boolean matches( String share, String service ) {
@@ -67,7 +60,6 @@ class SmbTree {
     }
     void send( ServerMessageBlock request,
                             ServerMessageBlock response ) throws SmbException {
-synchronized (session.transport()) {
         if( response != null ) {
             response.received = false;
         }
@@ -128,74 +120,57 @@ synchronized (session.transport()) {
             }
             throw se;
         }
-}
     }
     void treeConnect( ServerMessageBlock andx,
                             ServerMessageBlock andxResponse ) throws SmbException {
-
-synchronized (session.transport()) {
         String unc;
+        SmbTransport transport = session.transport();
 
-        while (connectionState != 0) {
-            if (connectionState == 2 || connectionState == 3) // connected or disconnecting
-                return;
-            try {
-                session.transport.wait();
-            } catch (InterruptedException ie) {
-                throw new SmbException(ie.getMessage(), ie);
-            }
+synchronized(transport.setupDiscoLock) {
+synchronized(transport) {
+
+        if (treeConnected) {
+            return;
         }
-        connectionState = 1; // trying ...
 
-        try {
-            /* The hostname to use in the path is only known for
-             * sure if the NetBIOS session has been successfully
-             * established.
-             */
-    
-            session.transport.connect();
+        /* The hostname to use in the path is only known for
+         * sure if the NetBIOS session has been successfully
+         * established.
+         */
 
-            unc = "\\\\" + session.transport.tconHostName + '\\' + share;
-    
-            /* IBM iSeries doesn't like specifying a service. Always reset
-             * the service to whatever was determined in the constructor.
-             */
-            service = service0;
-    
-            /*
-             * Tree Connect And X Request / Response
-             */
-    
-            if( session.transport.log.level >= 4 )
-                session.transport.log.println( "treeConnect: unc=" + unc + ",service=" + service );
-    
-            SmbComTreeConnectAndXResponse response =
-                    new SmbComTreeConnectAndXResponse( andxResponse );
-            SmbComTreeConnectAndX request =
-                    new SmbComTreeConnectAndX( session, unc, service, andx );
-            session.send( request, response );
-    
-            tid = response.tid;
-            service = response.service;
-            inDfs = response.shareIsInDfs;
-            tree_num = tree_conn_counter++;
-    
-            connectionState = 2; // connected
-        } catch (SmbException se) {
-            treeDisconnect(true);
-            connectionState = 0;
-            throw se;
-        }
+        session.transport.connect();
+
+        unc = "\\\\" + session.transport.tconHostName + '\\' + share;
+
+        /* IBM iSeries doesn't like specifying a service. Always reset
+         * the service to whatever was determined in the constructor.
+         */
+        service = service0;
+
+        /*
+         * Tree Connect And X Request / Response
+         */
+
+        if( session.transport.log.level >= 4 )
+            session.transport.log.println( "treeConnect: unc=" + unc + ",service=" + service );
+
+        SmbComTreeConnectAndXResponse response =
+                new SmbComTreeConnectAndXResponse( andxResponse );
+        SmbComTreeConnectAndX request =
+                new SmbComTreeConnectAndX( session, unc, service, andx );
+        session.send( request, response );
+
+        tid = response.tid;
+        service = response.service;
+        inDfs = response.shareIsInDfs;
+        treeConnected = true;
+        tree_num = tree_conn_counter++;
+}
 }
     }
     void treeDisconnect( boolean inError ) {
-synchronized (session.transport()) {
-
-        if (connectionState != 2) // not-connected
-            return;
-        connectionState = 3; // disconnecting
-
-        if (!inError && tid != 0) {
+synchronized( session.transport ) {
+        if (treeConnected && !inError && tid != 0) {
             try {
                 send( new SmbComTreeDisconnect(), null );
             } catch( SmbException se ) {
@@ -204,12 +179,9 @@ synchronized (session.transport()) {
                 }
             }
         }
+        treeConnected = false;
         inDfs = false;
         inDomainDfs = false;
-
-        connectionState = 0;
-
-        session.transport.notifyAll();
 }
     }
 
@@ -219,6 +191,6 @@ synchronized (session.transport()) {
             ",tid=" + tid +
             ",inDfs=" + inDfs +
             ",inDomainDfs=" + inDomainDfs +
-            ",connectionState=" + connectionState + "]";
+            ",treeConnected=" + treeConnected + "]";
     }
 }

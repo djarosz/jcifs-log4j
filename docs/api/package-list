@@ -1,4 +1,11 @@
 jcifs
+jcifs.dcerpc
+jcifs.dcerpc.msrpc
+jcifs.dcerpc.ndr
+jcifs.http
+jcifs.https
 jcifs.netbios
+jcifs.ntlmssp
 jcifs.smb
 jcifs.util
+jcifs.util.transport

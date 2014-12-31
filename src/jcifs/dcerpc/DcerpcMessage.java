@@ -35,7 +35,7 @@ public abstract class DcerpcMessage extends NdrObject implements DcerpcConstants
         return (flags & flag) == flag;
     }
     public void unsetFlag(int flag) {
-        flags &= ~flag;
+        flags |= flag;
     }
     public void setFlag(int flag) {
         flags |= flag;
@@ -57,9 +57,8 @@ public abstract class DcerpcMessage extends NdrObject implements DcerpcConstants
         buf.enc_ndr_long(call_id);
     }
     void decode_header(NdrBuffer buf) throws NdrException {
-         /* RPC major / minor version */
-        if (buf.dec_ndr_small() != 5 || buf.dec_ndr_small() != 0)
-            throw new NdrException("DCERPC version not supported");
+        buf.dec_ndr_small(); /* RPC version */
+        buf.dec_ndr_small(); /* minor version */
         ptype = buf.dec_ndr_small();
         flags = buf.dec_ndr_small();
         if (buf.dec_ndr_long() != 0x00000010) /* Little-endian / ASCII / IEEE */
@@ -97,7 +96,7 @@ public abstract class DcerpcMessage extends NdrObject implements DcerpcConstants
     public void decode(NdrBuffer buf) throws NdrException {
         decode_header(buf);
 
-        if (ptype != 12 && ptype != 2 && ptype != 3 && ptype != 13)
+        if (ptype != 12 && ptype != 2 && ptype != 3)
             throw new NdrException("Unexpected ptype: " + ptype);
 
         if (ptype == 2 || ptype == 3) { /* Response or Fault */
@@ -105,7 +104,7 @@ public abstract class DcerpcMessage extends NdrObject implements DcerpcConstants
             buf.dec_ndr_short();        /* context id */
             buf.dec_ndr_short();        /* cancel count */
         }
-        if (ptype == 3 || ptype == 13) {               /* Fault */
+        if (ptype == 3) {               /* Fault */
             result = buf.dec_ndr_long();
         } else {                        /* Bind_ack or Response */
             decode_out(buf);

@@ -84,7 +84,7 @@ class NameServiceClient implements Runnable {
         if( RO == null || RO.length() == 0 ) {
 
             /* No resolveOrder has been specified, use the
-             * default which is LMHOSTS,DNS,WINS,BCAST
+             * default which is LMHOSTS,WINS,BCAST,DNS or just
              * LMHOSTS,BCAST,DNS if jcifs.netbios.wins has not
              * been specified.
              */

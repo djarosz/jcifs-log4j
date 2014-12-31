@@ -50,7 +50,7 @@ public class Dfs {
     protected CacheEntry referrals = null;
 
     public HashMap getTrustedDomains(NtlmPasswordAuthentication auth) throws SmbAuthException {
-        if (DISABLED || auth.domain == "?")
+        if (DISABLED)
             return null;
 
         if (_domains != null && System.currentTimeMillis() > _domains.expiration) {
@@ -61,20 +61,14 @@ public class Dfs {
         try {
             UniAddress addr = UniAddress.getByName(auth.domain, true);
             SmbTransport trans = SmbTransport.getSmbTransport(addr, 0);
+            DfsReferral[] dr = trans.getDfsReferrals(auth, "", 0);
             CacheEntry entry = new CacheEntry(Dfs.TTL * 10L);
-
-            DfsReferral dr = trans.getDfsReferrals(auth, "", 0);
-            if (dr != null) {
-                DfsReferral start = dr;
-                do {
-                    String domain = dr.server.toLowerCase();
-                    entry.map.put(domain, new HashMap());
-                    dr = dr.next;
-                } while (dr != start);
-    
-                _domains = entry;
-                return _domains.map;
+            for (int di = 0; di < dr.length; di++) {
+                String domain = dr[di].server;
+                entry.map.put(domain, new HashMap());
             }
+            _domains = entry;
+            return _domains.map;
         } catch (IOException ioe) {
             if (log.level >= 3)
                 ioe.printStackTrace(log);
@@ -101,23 +95,10 @@ public class Dfs {
         try {
             UniAddress addr = UniAddress.getByName(domain, true);
             SmbTransport trans = SmbTransport.getSmbTransport(addr, 0);
-            DfsReferral dr = trans.getDfsReferrals(auth, "\\" + domain, 1);
-            if (dr != null) {
-                DfsReferral start = dr;
-                IOException e = null;
-
-                do {
-                    try {
-                        addr = UniAddress.getByName(dr.server);
-                        return SmbTransport.getSmbTransport(addr, 0);
-                    } catch (IOException ioe) {
-                        e = ioe;
-                    }
-
-                    dr = dr.next;
-                } while (dr != start);
-
-                throw e;
+            DfsReferral[] dr = trans.getDfsReferrals(auth, "\\" + domain, 1);
+            if (dr.length == 1) {
+                addr = UniAddress.getByName(dr[0].server);
+                return SmbTransport.getSmbTransport(addr, 0);
             }
         } catch (IOException ioe) {
             if (log.level >= 3)
@@ -140,11 +121,11 @@ public class Dfs {
             String p = "\\" + domain + "\\" + root;
             if (path != null)
                 p += path;
-            DfsReferral dr = trans.getDfsReferrals(auth, p, 0);
-            if (dr != null)
-                return dr;
+            DfsReferral[] dr = trans.getDfsReferrals(auth, p, 1);
+            if (dr.length == 1)
+                return dr[0];
         } catch (IOException ioe) {
-            if (log.level >= 4)
+            if (log.level >= 3)
                 ioe.printStackTrace(log);
             if (strictView && ioe instanceof SmbAuthException) {
                 throw (SmbAuthException)ioe;
@@ -162,57 +143,30 @@ public class Dfs {
         if (DISABLED || root.equals("IPC$")) {
             return null;
         }
-        /* domains that can contain DFS points to maps of roots for each
-         */
         HashMap domains = getTrustedDomains(auth);
         if (domains != null) {
             domain = domain.toLowerCase();
-            /* domain-based DFS root shares to links for each
-             */
             HashMap roots = (HashMap)domains.get(domain);
             if (roots != null) {
                 SmbTransport trans = null;
 
                 root = root.toLowerCase();
 
-                /* The link entries contain maps of referrals by path representing DFS links.
-                 * Note that paths are relative to the root like "\" and not "\example.com\root".
-                 */
                 CacheEntry links = (CacheEntry)roots.get(root);
                 if (links != null && now > links.expiration) {
                     roots.remove(root);
                     links = null;
                 }
-
                 if (links == null) {
                     if ((trans = getDc(domain, auth)) == null)
                         return null;
 
                     dr = getReferral(trans, domain, root, path, auth);
                     if (dr != null) {
-                        int len = 1 + domain.length() + 1 + root.length();
-
+                        dr.pathConsumed -= 1 + domain.length() + 1 + root.length();
                         links = new CacheEntry(0L);
-
-                        DfsReferral tmp = dr;
-                        do {
-                            if (path == null) {
-                                /* Store references to the map and key so that
-                                 * SmbFile.resolveDfs can re-insert the dr list with
-                                 * the dr that was successful so that subsequent
-                                 * attempts to resolve DFS use the last successful
-                                 * referral first.
-                                 */
-                                tmp.map = links.map;
-                                tmp.key = "\\";
-                            }
-                            tmp.pathConsumed -= len;
-                            tmp = tmp.next;
-                        } while (tmp != dr);
-
-                        if (dr.key != null)
-                            links.map.put(dr.key, dr);
-
+                        if (path == null)
+                            links.map.put("\\", dr);
                         roots.put(root, links);
                     } else if (path == null) {
                         roots.put(root, Dfs.FALSE_ENTRY);
@@ -223,16 +177,16 @@ public class Dfs {
 
                 if (links != null) {
                     String link = "\\";
-
-                    /* Lookup the domain based DFS root target referral. Note the
-                     * path is just "\" and not "\example.com\root".
-                     */
-                    dr = (DfsReferral)links.map.get(link);
-                    if (dr != null && now > dr.expiration) {
-                        links.map.remove(link);
-                        dr = null;
+                    if (path != null) {
+                        int i = path.indexOf("\\", 1);
+                        link = i > 0 ? path.substring(1, i) : path.substring(1);
                     }
 
+                    dr = (DfsReferral)links.map.get(link);
+                    if (dr != null && now > dr.expiration) {
+                        dr = null;
+                        links.map.remove(link);
+                    }
                     if (dr == null) {
                         if (trans == null)
                             if ((trans = getDc(domain, auth)) == null)
@@ -249,9 +203,6 @@ public class Dfs {
         }
 
         if (dr == null && path != null) {
-            /* We did not match a domain based root. Now try to match the
-             * longest path in the list of stand-alone referrals.
-             */
             if (referrals != null && now > referrals.expiration) {
                 referrals = null;
             }
@@ -295,21 +246,6 @@ public class Dfs {
         share = path.substring(s1 + 1, s2);
 
         key = path.substring(0, dr.pathConsumed).toLowerCase();
-
-        /* Samba has a tendency to return referral paths and pathConsumed values
-         * in such a way that there can be a slash at the end of the path. This
-         * causes problems matching keys in resolve() where an extra slash causes
-         * a mismatch. This strips trailing slashes from all keys to eliminate
-         * this problem.
-         */
-        int ki = key.length();
-        while (ki > 1 && key.charAt(ki - 1) == '\\') {
-            ki--;
-        }
-        if (ki < key.length()) {
-            key = key.substring(0, ki);
-        }
-
         /* Subtract the server and share from the pathConsumed so that
          * it refects the part of the relative path consumed and not
          * the entire path.

@@ -185,6 +185,8 @@ abstract class AndXServerMessageBlock extends ServerMessageBlock {
         int start = bufferIndex;
 
         wordCount = buffer[bufferIndex++];
+if (command == SMB_COM_NT_CREATE_ANDX)
+    wordCount = 42;
 
         if( wordCount != 0 ) {
             /*
@@ -192,8 +194,8 @@ abstract class AndXServerMessageBlock extends ServerMessageBlock {
              * so let's populate them here
              */
 
-            andxCommand = buffer[bufferIndex];
-            andxOffset = readInt2( buffer, bufferIndex + 2 );
+            andxCommand = buffer[bufferIndex]; bufferIndex += 2;
+            andxOffset = readInt2( buffer, bufferIndex ); bufferIndex += 2;
 
             if( andxOffset == 0 ) { /* Snap server workaround */
                 andxCommand = (byte)0xFF;
@@ -205,19 +207,14 @@ abstract class AndXServerMessageBlock extends ServerMessageBlock {
              */
  
             if( wordCount > 2 ) {
-                readParameterWordsWireFormat( buffer, bufferIndex + 4 );
-
-                /* The SMB_COM_NT_CREATE_ANDX response wordCount is wrong. There's an
-                 * extra 16 bytes for some "Offline Files (CSC or Client Side Caching)"
-                 * junk. We need to bump up the wordCount here so that this method returns
-                 * the correct number of bytes for signing purposes. Otherwise we get a
-                 * signing verification failure.
-                 */
-                if (command == SMB_COM_NT_CREATE_ANDX && ((SmbComNTCreateAndXResponse)this).isExtended)
-                    wordCount += 8;
+                bufferIndex += readParameterWordsWireFormat( buffer, bufferIndex );
+/* required for signing verification
+ */
+if (command == SMB_COM_NT_CREATE_ANDX) {
+    if (((SmbComNTCreateAndXResponse)this).isExtended)
+        bufferIndex += 32;
+}
             }
-
-            bufferIndex = start + 1 + (wordCount * 2);
         }
 
         byteCount = readInt2( buffer, bufferIndex ); bufferIndex += 2;

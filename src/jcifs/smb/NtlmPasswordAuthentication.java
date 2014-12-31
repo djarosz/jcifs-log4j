@@ -22,8 +22,6 @@ package jcifs.smb;
 import java.io.UnsupportedEncodingException;
 import java.io.Serializable;
 import java.security.Principal;
-import java.security.MessageDigest;
-import java.security.GeneralSecurityException;
 import java.util.Random;
 import java.util.Arrays;
 import jcifs.Config;
@@ -42,7 +40,7 @@ import jcifs.util.*;
 public final class NtlmPasswordAuthentication implements Principal, Serializable {
 
     private static final int LM_COMPATIBILITY =
-            Config.getInt("jcifs.smb.lmCompatibility", 3);
+            Config.getInt("jcifs.smb.lmCompatibility", 0);
 
     private static final Random RANDOM = new Random();
 
@@ -53,10 +51,6 @@ public final class NtlmPasswordAuthentication implements Principal, Serializable
         (byte)0x4b, (byte)0x47, (byte)0x53, (byte)0x21,
         (byte)0x40, (byte)0x23, (byte)0x24, (byte)0x25
     };
-    /* Accepts key multiple of 7
-     * Returns enc multiple of 8
-     * Multiple is the same like: 21 byte key gives 24 byte result
-     */
     private static void E( byte[] key, byte[] data, byte[] e ) {
         byte[] key7 = new byte[7];
         byte[] e8 = new byte[8];
@@ -73,8 +67,6 @@ public final class NtlmPasswordAuthentication implements Principal, Serializable
     static String DEFAULT_USERNAME;
     static String DEFAULT_PASSWORD;
     static final String BLANK = "";
-
-    public static final NtlmPasswordAuthentication ANONYMOUS = new NtlmPasswordAuthentication("", "", "");
 
     static void initDefaults() {
         if (DEFAULT_DOMAIN != null) return;
@@ -116,7 +108,7 @@ public final class NtlmPasswordAuthentication implements Principal, Serializable
         byte[] p24 = new byte[24];
 
         try {
-            uni = password.getBytes( SmbConstants.UNI_ENCODING );
+            uni = password.getBytes( "UnicodeLittleUnmarked" );
         } catch( UnsupportedEncodingException uee ) {
             if( log.level > 0 )
                 uee.printStackTrace( log );
@@ -147,12 +139,11 @@ public final class NtlmPasswordAuthentication implements Principal, Serializable
         try {
             byte[] hash = new byte[16];
             byte[] response = new byte[24];
-// The next 2-1/2 lines of this should be placed with nTOWFv1 in place of password
             MD4 md4 = new MD4();
-            md4.update(password.getBytes(SmbConstants.UNI_ENCODING));
+            md4.update(password.getBytes("UnicodeLittleUnmarked"));
             HMACT64 hmac = new HMACT64(md4.digest());
-            hmac.update(user.toUpperCase().getBytes(SmbConstants.UNI_ENCODING));
-            hmac.update(domain.toUpperCase().getBytes(SmbConstants.UNI_ENCODING));
+            hmac.update(user.toUpperCase().getBytes("UnicodeLittleUnmarked"));
+            hmac.update(domain.toUpperCase().getBytes("UnicodeLittleUnmarked"));
             hmac = new HMACT64(hmac.digest());
             hmac.update(challenge);
             hmac.update(clientChallenge);
@@ -164,107 +155,6 @@ public final class NtlmPasswordAuthentication implements Principal, Serializable
                 ex.printStackTrace( log );
             return null;
         }
-    }
-    public static byte[] getNTLM2Response(byte[] nTOWFv1,
-                    byte[] serverChallenge,
-                    byte[] clientChallenge)
-    {
-        byte[] sessionHash = new byte[8];
-
-        try {
-            MessageDigest md5;
-            md5 = MessageDigest.getInstance("MD5");
-            md5.update(serverChallenge);
-            md5.update(clientChallenge, 0, 8);
-            System.arraycopy(md5.digest(), 0, sessionHash, 0, 8);
-        } catch (GeneralSecurityException gse) {
-            if (log.level > 0)
-                gse.printStackTrace(log);
-            throw new RuntimeException("MD5", gse);
-        }
-
-        byte[] key = new byte[21];
-        System.arraycopy(nTOWFv1, 0, key, 0, 16);
-        byte[] ntResponse = new byte[24];
-        E(key, sessionHash, ntResponse);
-
-        return ntResponse;
-    }
-    public static byte[] nTOWFv1(String password)
-    {
-        if (password == null)
-            throw new RuntimeException("Password parameter is required");
-        try {
-            MD4 md4 = new MD4();
-            md4.update(password.getBytes(SmbConstants.UNI_ENCODING));
-            return md4.digest();
-        } catch (UnsupportedEncodingException uee) {
-            throw new RuntimeException(uee.getMessage());
-        }
-    }
-    public static byte[] nTOWFv2(String domain, String username, String password)
-    {
-        try {
-            MD4 md4 = new MD4();
-            md4.update(password.getBytes(SmbConstants.UNI_ENCODING));
-            HMACT64 hmac = new HMACT64(md4.digest());
-            hmac.update(username.toUpperCase().getBytes(SmbConstants.UNI_ENCODING));
-            hmac.update(domain.getBytes(SmbConstants.UNI_ENCODING));
-            return hmac.digest();
-        } catch (UnsupportedEncodingException uee) {
-            throw new RuntimeException(uee.getMessage());
-        }
-    }
-    static byte[] computeResponse(byte[] responseKey,
-                byte[] serverChallenge,
-                byte[] clientData,
-                int offset,
-                int length)
-    {
-        HMACT64 hmac = new HMACT64(responseKey);
-        hmac.update(serverChallenge);
-        hmac.update(clientData, offset, length);
-        byte[] mac = hmac.digest();
-        byte[] ret = new byte[mac.length + clientData.length];
-        System.arraycopy(mac, 0, ret, 0, mac.length);
-        System.arraycopy(clientData, 0, ret, mac.length, clientData.length);
-        return ret;
-    }
-    public static byte[] getLMv2Response(
-            byte[] responseKeyLM,
-            byte[] serverChallenge,
-            byte[] clientChallenge)
-    {
-        return NtlmPasswordAuthentication.computeResponse(responseKeyLM,
-                    serverChallenge,
-                    clientChallenge,
-                    0,
-                    clientChallenge.length);
-    }
-    public static byte[] getNTLMv2Response(
-            byte[] responseKeyNT,
-            byte[] serverChallenge,
-            byte[] clientChallenge,
-            long nanos1601,
-            byte[] targetInfo)
-    {
-        int targetInfoLength = targetInfo != null ? targetInfo.length : 0;
-        byte[] temp = new byte[28 + targetInfoLength + 4];
-
-        Encdec.enc_uint32le(0x00000101, temp, 0); // Header
-        Encdec.enc_uint32le(0x00000000, temp, 4); // Reserved
-        Encdec.enc_uint64le(nanos1601, temp, 8);
-        System.arraycopy(clientChallenge, 0, temp, 16, 8);
-        Encdec.enc_uint32le(0x00000000, temp, 24); // Unknown
-        if (targetInfo != null)
-            System.arraycopy(targetInfo, 0, temp, 28, targetInfoLength);
-        Encdec.enc_uint32le(0x00000000, temp, 28 + targetInfoLength); // mystery bytes!
-
-        return NtlmPasswordAuthentication.computeResponse(responseKeyNT,
-                        serverChallenge,
-                        temp,
-                        0,
-                        temp.length);
     }
 
     static final NtlmPasswordAuthentication NULL =
@@ -328,22 +218,6 @@ public final class NtlmPasswordAuthentication implements Principal, Serializable
  * property values.
  */
     public NtlmPasswordAuthentication( String domain, String username, String password ) {
-        int ci;
-
-        if (username != null) {
-            ci = username.indexOf('@');
-            if (ci > 0) {
-                domain = username.substring(ci + 1);
-                username = username.substring(0, ci);
-            } else {
-                ci = username.indexOf('\\');
-                if (ci > 0) {
-                    domain = username.substring(0, ci);
-                    username = username.substring(ci + 1);
-                }
-            }
-        }
-
         this.domain = domain;
         this.username = username;
         this.password = password;
@@ -461,27 +335,6 @@ public final class NtlmPasswordAuthentication implements Principal, Serializable
         }
     }
 
-    public byte[] getSigningKey(byte[] challenge) throws SmbException
-    {
-        switch (LM_COMPATIBILITY) {
-            case 0:
-            case 1:
-            case 2:
-                byte[] signingKey = new byte[40];
-                getUserSessionKey(challenge, signingKey, 0);
-                System.arraycopy(getUnicodeHash(challenge), 0, signingKey, 16, 24);
-                return signingKey;
-            case 3:
-            case 4:
-            case 5:
-                /* This code is only called if extended security is not on. This will
-                 * all be cleaned up an normalized in JCIFS 2.x.
-                 */
-                throw new SmbException("NTLMv2 requires extended security (jcifs.smb.client.useExtendedSecurity must be true if jcifs.smb.lmCompatibility >= 3)");
-        }
-        return null;
-    }
-
     /**
      * Returns the effective user session key.
      * 
@@ -510,47 +363,44 @@ public final class NtlmPasswordAuthentication implements Principal, Serializable
      * @param offset The offset in the destination array at which the
      * session key will start.
      */
-    void getUserSessionKey(byte[] challenge, byte[] dest, int offset) throws SmbException {
+    void getUserSessionKey(byte[] challenge, byte[] dest, int offset)
+            throws Exception {
         if (hashesExternal) return;
-        try {
-            MD4 md4 = new MD4();
-            md4.update(password.getBytes(SmbConstants.UNI_ENCODING)); 
-            switch (LM_COMPATIBILITY) {
-            case 0:
-            case 1:
-            case 2:
-                md4.update(md4.digest()); 
-                md4.digest(dest, offset, 16); 
-                break; 
-            case 3:
-            case 4:
-            case 5:
-                if( clientChallenge == null ) {
-                    clientChallenge = new byte[8];
-                    RANDOM.nextBytes( clientChallenge );
-                }
+        MD4 md4 = new MD4();
+        md4.update(password.getBytes("UnicodeLittleUnmarked")); 
+        switch (LM_COMPATIBILITY) {
+        case 0:
+        case 1:
+        case 2:
+            md4.update(md4.digest()); 
+            md4.digest(dest, offset, 16); 
+            break; 
+        case 3:
+        case 4:
+        case 5:
+            if( clientChallenge == null ) {
+                clientChallenge = new byte[8];
+                RANDOM.nextBytes( clientChallenge );
+            }
 
-                HMACT64 hmac = new HMACT64(md4.digest());
-                hmac.update(username.toUpperCase().getBytes(
-                        SmbConstants.UNI_ENCODING));
-                hmac.update(domain.toUpperCase().getBytes(
-                        SmbConstants.UNI_ENCODING));
-                byte[] ntlmv2Hash = hmac.digest();
-                hmac = new HMACT64(ntlmv2Hash);
-                hmac.update(challenge);
-                hmac.update(clientChallenge); 
-                HMACT64 userKey = new HMACT64(ntlmv2Hash); 
-                userKey.update(hmac.digest()); 
-                userKey.digest(dest, offset, 16); 
-                break; 
-            default: 
-                md4.update(md4.digest()); 
-                md4.digest(dest, offset, 16); 
-                break; 
-            } 
-        } catch (Exception e) {
-            throw new SmbException("", e);
-        }
+            HMACT64 hmac = new HMACT64(md4.digest());
+            hmac.update(username.toUpperCase().getBytes(
+                    "UnicodeLittleUnmarked"));
+            hmac.update(domain.toUpperCase().getBytes(
+                    "UnicodeLittleUnmarked"));
+            byte[] ntlmv2Hash = hmac.digest();
+            hmac = new HMACT64(ntlmv2Hash);
+            hmac.update(challenge);
+            hmac.update(clientChallenge); 
+            HMACT64 userKey = new HMACT64(ntlmv2Hash); 
+            userKey.update(hmac.digest()); 
+            userKey.digest(dest, offset, 16); 
+            break; 
+        default: 
+            md4.update(md4.digest()); 
+            md4.digest(dest, offset, 16); 
+            break; 
+        } 
     } 
 
 /**

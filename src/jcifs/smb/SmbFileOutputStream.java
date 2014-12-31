@@ -187,10 +187,6 @@ write, and/or delete the file while the jCIFS user has the file open.
         write( b, 0, b.length );
     }
 
-    public boolean isOpen()
-    {
-        return file.isOpen();
-    }
     void ensureOpen() throws IOException {
         // ensure file is open
         if( file.isOpen() == false ) {

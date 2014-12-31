@@ -34,8 +34,7 @@ public abstract class NtlmMessage implements NtlmFlags {
         (byte) 'S', (byte) 'S', (byte) 'P', (byte) 0
     };
 
-    private static final String OEM_ENCODING = Config.DEFAULT_OEM_ENCODING;
-    protected static final String UNI_ENCODING = "UTF-16LE";
+    private static final String OEM_ENCODING = Config.getProperty("jcifs.encoding", "Cp850");
 
     private int flags;
 

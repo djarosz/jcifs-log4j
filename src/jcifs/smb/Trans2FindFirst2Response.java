@@ -105,7 +105,7 @@ class Trans2FindFirst2Response extends SmbComTransactionResponse {
         try {
             if( useUnicode ) {
                 // should Unicode alignment be corrected for here?
-                str = new String( src, srcIndex, len, UNI_ENCODING );
+                str = new String( src, srcIndex, len, "UnicodeLittleUnmarked" );
             } else {
     
                 /* On NT without Unicode the fileNameLength

@@ -78,14 +78,14 @@ public class UniAddress {
             if( nbns == null ) {
                 resolveOrder = new int[3];
                 resolveOrder[0] = RESOLVER_LMHOSTS;
-                resolveOrder[1] = RESOLVER_DNS;
-                resolveOrder[2] = RESOLVER_BCAST;
+                resolveOrder[1] = RESOLVER_BCAST;
+                resolveOrder[2] = RESOLVER_DNS;
             } else {
                 resolveOrder = new int[4];
                 resolveOrder[0] = RESOLVER_LMHOSTS;
                 resolveOrder[1] = RESOLVER_WINS;
-                resolveOrder[2] = RESOLVER_DNS;
-                resolveOrder[3] = RESOLVER_BCAST;
+                resolveOrder[2] = RESOLVER_BCAST;
+                resolveOrder[3] = RESOLVER_DNS;
             }
         } else {
             int[] tmp = new int[4];

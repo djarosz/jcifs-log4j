@@ -25,43 +25,55 @@ public class BufferCache {
     private static final int MAX_BUFFERS = Config.getInt( "jcifs.smb.maxBuffers", 16 );
 
     static Object[] cache = new Object[MAX_BUFFERS];
+    private static int numBuffers = 0;
     private static int freeBuffers = 0;
 
-    static public byte[] getBuffer() {
-        synchronized( cache ) {
-            byte[] buf;
+    private static byte[] getBuffer0() {
+        byte[] buf;
 
-            if (freeBuffers > 0) {
-                for (int i = 0; i < MAX_BUFFERS; i++) {
-                    if( cache[i] != null ) {
-                        buf = (byte[])cache[i];
-                        cache[i] = null;
-                        freeBuffers--;
-                        return buf;
-                    }
+        if (freeBuffers > 0) {
+            for (int i = 0; i < MAX_BUFFERS; i++) {
+                if( cache[i] != null ) {
+                    buf = (byte[])cache[i];
+                    cache[i] = null;
+                    freeBuffers--;
+                    return buf;
                 }
             }
+        }
 
-            buf = new byte[SmbComTransaction.TRANSACTION_BUF_SIZE];
+        buf = new byte[SmbComTransaction.TRANSACTION_BUF_SIZE];
+        numBuffers++;
 
-            return buf;
+        return buf;
+    }
+
+    static void getBuffers( SmbComTransaction req,
+                    SmbComTransactionResponse rsp ) throws InterruptedException {
+        synchronized( cache ) {
+            while ((freeBuffers + (MAX_BUFFERS - numBuffers)) < 2) {
+                cache.wait();
+            }
+            req.txn_buf = getBuffer0();
+            rsp.txn_buf = getBuffer0();
         }
     }
-    static void getBuffers( SmbComTransaction req, SmbComTransactionResponse rsp ) {
+    static public byte[] getBuffer() throws InterruptedException {
         synchronized( cache ) {
-            req.txn_buf = getBuffer();
-            rsp.txn_buf = getBuffer();
+            while ((freeBuffers + (MAX_BUFFERS - numBuffers)) < 1) {
+                cache.wait();
+            }
+            return getBuffer0();
         }
     }
     static public void releaseBuffer( byte[] buf ) {
         synchronized( cache ) {
-            if (freeBuffers < MAX_BUFFERS) {
-                for (int i = 0; i < MAX_BUFFERS; i++) {
-                    if (cache[i] == null) {
-                        cache[i] = buf;
-                        freeBuffers++;
-                        return;
-                    }
+            for (int i = 0; i < MAX_BUFFERS; i++) {
+                if (cache[i] == null) {
+                    cache[i] = buf;
+                    freeBuffers++;
+                    cache.notify();
+                    return;
                 }
             }
         }

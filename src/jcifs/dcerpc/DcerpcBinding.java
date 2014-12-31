@@ -24,7 +24,7 @@ import java.util.Iterator;
 
 import jcifs.dcerpc.msrpc.*;
 
-public class DcerpcBinding {
+class DcerpcBinding {
 
     private static HashMap INTERFACES;
 
@@ -34,11 +34,6 @@ public class DcerpcBinding {
         INTERFACES.put("lsarpc", lsarpc.getSyntax());
         INTERFACES.put("samr", samr.getSyntax());
         INTERFACES.put("netdfs", netdfs.getSyntax());
-    }
-
-    public static void addInterface(String name, String syntax)
-    {
-        INTERFACES.put(name, syntax);
     }
 
     String proto;
@@ -56,10 +51,9 @@ public class DcerpcBinding {
 
     void setOption(String key, Object val) throws DcerpcException {
         if (key.equals("endpoint")) {
-            endpoint = val.toString();
-            String lep = endpoint.toLowerCase();
-            if (lep.startsWith("\\pipe\\")) {
-                String iface = (String)INTERFACES.get(lep.substring(6));
+            endpoint = val.toString().toLowerCase();
+            if (endpoint.startsWith("\\pipe\\")) {
+                String iface = (String)INTERFACES.get(endpoint.substring(6));
                 if (iface != null) {
                     int c, p;
                     c = iface.indexOf(':');
@@ -79,9 +73,7 @@ public class DcerpcBinding {
     Object getOption(String key) {
         if (key.equals("endpoint"))
             return endpoint;
-        if (options != null)
-            return options.get(key);
-        return null;
+        return options.get(key);
     }
 
     public String toString() {

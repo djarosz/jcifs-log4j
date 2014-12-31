@@ -74,18 +74,14 @@ public interface NtStatus {
     public static final int NT_STATUS_NO_SUCH_DOMAIN = 0xC00000df;
     public static final int NT_STATUS_NOT_A_DIRECTORY = 0xC0000103;
     public static final int NT_STATUS_CANNOT_DELETE = 0xC0000121;
-    public static final int NT_STATUS_INVALID_COMPUTER_NAME = 0xC0000122;
     public static final int NT_STATUS_PIPE_BROKEN = 0xC000014b;
     public static final int NT_STATUS_NO_SUCH_ALIAS = 0xC0000151;
     public static final int NT_STATUS_LOGON_TYPE_NOT_GRANTED = 0xC000015b;
-    public static final int NT_STATUS_NO_TRUST_SAM_ACCOUNT = 0xC000018b;
     public static final int NT_STATUS_TRUSTED_DOMAIN_FAILURE = 0xC000018c;
-    public static final int NT_STATUS_NOLOGON_WORKSTATION_TRUST_ACCOUNT = 0xC0000199;
     public static final int NT_STATUS_PASSWORD_MUST_CHANGE = 0xC0000224;
     public static final int NT_STATUS_NOT_FOUND = 0xC0000225;
     public static final int NT_STATUS_ACCOUNT_LOCKED_OUT = 0xC0000234;
     public static final int NT_STATUS_PATH_NOT_COVERED = 0xC0000257;
-    public static final int NT_STATUS_IO_REPARSE_TAG_NOT_HANDLED = 0xC0000279;
 
     static final int[] NT_STATUS_CODES = {
         NT_STATUS_OK,
@@ -138,18 +134,14 @@ public interface NtStatus {
         NT_STATUS_NO_SUCH_DOMAIN,
         NT_STATUS_NOT_A_DIRECTORY,
         NT_STATUS_CANNOT_DELETE,
-        NT_STATUS_INVALID_COMPUTER_NAME,
         NT_STATUS_PIPE_BROKEN,
         NT_STATUS_NO_SUCH_ALIAS,
         NT_STATUS_LOGON_TYPE_NOT_GRANTED,
-        NT_STATUS_NO_TRUST_SAM_ACCOUNT,
         NT_STATUS_TRUSTED_DOMAIN_FAILURE,
-        NT_STATUS_NOLOGON_WORKSTATION_TRUST_ACCOUNT,
         NT_STATUS_PASSWORD_MUST_CHANGE,
         NT_STATUS_NOT_FOUND,
         NT_STATUS_ACCOUNT_LOCKED_OUT,
         NT_STATUS_PATH_NOT_COVERED,
-        NT_STATUS_IO_REPARSE_TAG_NOT_HANDLED,
     };
 
     static final String[] NT_STATUS_MESSAGES = {
@@ -203,18 +195,14 @@ public interface NtStatus {
         "The specified domain did not exist.",
         "The directory name is invalid.",
         "Access is denied.",
-        "The format of the specified computer name is invalid.",
         "The pipe has been ended.",
         "The specified local group does not exist.",
         "Logon failure: the user has not been granted the requested logon type at this computer.",
-        "The SAM database on the Windows NT Server does not have a computer account for this workstation trust relationship.",
         "The trust relationship between the primary domain and the trusted domain failed.",
-        "The account used is a Computer Account. Use your global user account or local user account to access this server.",
         "The user must change his password before he logs on the first time.",
         "NT_STATUS_NOT_FOUND",
         "The referenced account is currently locked out and may not be logged on to.",
         "The remote system is not reachable by the transport.",
-        "NT_STATUS_IO_REPARSE_TAG_NOT_HANDLED",
     };
 }
 

@@ -9,24 +9,6 @@ public class samr {
         return "12345778-1234-abcd-ef00-0123456789ac:1.0";
     }
 
-    public static final int ACB_DISABLED = 1;
-    public static final int ACB_HOMDIRREQ = 2;
-    public static final int ACB_PWNOTREQ = 4;
-    public static final int ACB_TEMPDUP = 8;
-    public static final int ACB_NORMAL = 16;
-    public static final int ACB_MNS = 32;
-    public static final int ACB_DOMTRUST = 64;
-    public static final int ACB_WSTRUST = 128;
-    public static final int ACB_SVRTRUST = 256;
-    public static final int ACB_PWNOEXP = 512;
-    public static final int ACB_AUTOLOCK = 1024;
-    public static final int ACB_ENC_TXT_PWD_ALLOWED = 2048;
-    public static final int ACB_SMARTCARD_REQUIRED = 4096;
-    public static final int ACB_TRUSTED_FOR_DELEGATION = 8192;
-    public static final int ACB_NOT_DELEGATED = 16384;
-    public static final int ACB_USE_DES_KEY_ONLY = 32768;
-    public static final int ACB_DONT_REQUIRE_PREAUTH = 65536;
-
     public static class SamrCloseHandle extends DcerpcMessage {
 
         public int getOpnum() { return 0x01; }
@@ -334,80 +316,6 @@ public class samr {
         public void decode_out(NdrBuffer _src) throws NdrException {
             sids.decode(_src);
             retval = (int)_src.dec_ndr_long();
-        }
-    }
-    public static final int SE_GROUP_MANDATORY = 1;
-    public static final int SE_GROUP_ENABLED_BY_DEFAULT = 2;
-    public static final int SE_GROUP_ENABLED = 4;
-    public static final int SE_GROUP_OWNER = 8;
-    public static final int SE_GROUP_USE_FOR_DENY_ONLY = 16;
-    public static final int SE_GROUP_RESOURCE = 536870912;
-    public static final int SE_GROUP_LOGON_ID = -1073741824;
-
-    public static class SamrRidWithAttribute extends NdrObject {
-
-        public int rid;
-        public int attributes;
-
-        public void encode(NdrBuffer _dst) throws NdrException {
-            _dst.align(4);
-            _dst.enc_ndr_long(rid);
-            _dst.enc_ndr_long(attributes);
-
-        }
-        public void decode(NdrBuffer _src) throws NdrException {
-            _src.align(4);
-            rid = (int)_src.dec_ndr_long();
-            attributes = (int)_src.dec_ndr_long();
-
-        }
-    }
-    public static class SamrRidWithAttributeArray extends NdrObject {
-
-        public int count;
-        public SamrRidWithAttribute[] rids;
-
-        public void encode(NdrBuffer _dst) throws NdrException {
-            _dst.align(4);
-            _dst.enc_ndr_long(count);
-            _dst.enc_ndr_referent(rids, 1);
-
-            if (rids != null) {
-                _dst = _dst.deferred;
-                int _ridss = count;
-                _dst.enc_ndr_long(_ridss);
-                int _ridsi = _dst.index;
-                _dst.advance(8 * _ridss);
-
-                _dst = _dst.derive(_ridsi);
-                for (int _i = 0; _i < _ridss; _i++) {
-                    rids[_i].encode(_dst);
-                }
-            }
-        }
-        public void decode(NdrBuffer _src) throws NdrException {
-            _src.align(4);
-            count = (int)_src.dec_ndr_long();
-            int _ridsp = _src.dec_ndr_long();
-
-            if (_ridsp != 0) {
-                _src = _src.deferred;
-                int _ridss = _src.dec_ndr_long();
-                int _ridsi = _src.index;
-                _src.advance(8 * _ridss);
-
-                if (rids == null) {
-                    if (_ridss < 0 || _ridss > 0xFFFF) throw new NdrException( NdrException.INVALID_CONFORMANCE );
-                    rids = new SamrRidWithAttribute[_ridss];
-                }
-                _src = _src.derive(_ridsi);
-                for (int _i = 0; _i < _ridss; _i++) {
-                    if (rids[_i] == null) {
-                        rids[_i] = new SamrRidWithAttribute();
-                    }
-                    rids[_i].decode(_src);
-                }
-            }
         }
     }
 }

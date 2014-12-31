@@ -28,75 +28,22 @@ class SmbComSessionSetupAndX extends AndXServerMessageBlock {
     private static final boolean DISABLE_PLAIN_TEXT_PASSWORDS =
             Config.getBoolean( "jcifs.smb.client.disablePlainTextPasswords", true );
 
-    private byte[] lmHash, ntHash, blob = null;
-    private int sessionKey, capabilities;
+    private byte[] accountPassword, unicodePassword;
+    private int passwordLength, unicodePasswordLength;
+    private int sessionKey;
     private String accountName, primaryDomain;
 
     SmbSession session;
-    Object cred;
+    NtlmPasswordAuthentication auth;
 
-    SmbComSessionSetupAndX( SmbSession session, ServerMessageBlock andx, Object cred ) throws SmbException {
+    SmbComSessionSetupAndX( SmbSession session, ServerMessageBlock andx ) throws SmbException {
         super( andx );
         command = SMB_COM_SESSION_SETUP_ANDX;
         this.session = session;
-        this.cred = cred;
-
-        sessionKey = session.transport.sessionKey;
-        capabilities = session.transport.capabilities;
-
-        if (session.transport.server.security == SECURITY_USER) {
-            if (cred instanceof NtlmPasswordAuthentication) {
-                NtlmPasswordAuthentication auth = (NtlmPasswordAuthentication)cred;
-
-                if (auth == NtlmPasswordAuthentication.ANONYMOUS) {
-                    lmHash = new byte[0];
-                    ntHash = new byte[0];
-                    capabilities &= ~SmbConstants.CAP_EXTENDED_SECURITY;
-                } else if (session.transport.server.encryptedPasswords) {
-                    lmHash = auth.getAnsiHash( session.transport.server.encryptionKey );
-                    ntHash = auth.getUnicodeHash( session.transport.server.encryptionKey );
-                    // prohibit HTTP auth attempts for the null session
-                    if (lmHash.length == 0 && ntHash.length == 0) {
-                        throw new RuntimeException("Null setup prohibited.");
-                    }
-                } else if( DISABLE_PLAIN_TEXT_PASSWORDS ) {
-                    throw new RuntimeException( "Plain text passwords are disabled" );
-                } else if( useUnicode ) {
-                    // plain text
-                    String password = auth.getPassword();
-                    lmHash = new byte[0];
-                    ntHash = new byte[(password.length() + 1) * 2];
-                    writeString( password, ntHash, 0 );
-                } else {
-                    // plain text
-                    String password = auth.getPassword();
-                    lmHash = new byte[(password.length() + 1) * 2];
-                    ntHash = new byte[0];
-                    writeString( password, lmHash, 0 );
-                }
-                accountName = auth.username;
-                if (useUnicode)
-                    accountName = accountName.toUpperCase();
-                primaryDomain = auth.domain.toUpperCase();
-            } else if (cred instanceof byte[]) {
-                blob = (byte[])cred;
-            } else {
-                throw new SmbException("Unsupported credential type");
-            }
-        } else if (session.transport.server.security == SECURITY_SHARE) {
-            if (cred instanceof NtlmPasswordAuthentication) {
-                NtlmPasswordAuthentication auth = (NtlmPasswordAuthentication)cred;
-                lmHash = new byte[0];
-                ntHash = new byte[0];
-                accountName = auth.username;
-                if (useUnicode)
-                    accountName = accountName.toUpperCase();
-                primaryDomain = auth.domain.toUpperCase();
-            } else {
-                throw new SmbException("Unsupported credential type");
-            }
-        } else {
-            throw new SmbException("Unsupported");
+        this.auth = session.auth;
+        if( auth.hashesExternal &&
+                    Arrays.equals(auth.challenge, session.transport.server.encryptionKey) == false ) {
+            throw new SmbAuthException( SmbException.NT_STATUS_ACCESS_VIOLATION );
         }
     }
 
@@ -106,6 +53,41 @@ class SmbComSessionSetupAndX extends AndXServerMessageBlock {
     int writeParameterWordsWireFormat( byte[] dst, int dstIndex ) {
         int start = dstIndex;
 
+        if( session.transport.server.security == SECURITY_USER &&
+                        ( auth.hashesExternal || auth.password.length() > 0 )) {
+            if( session.transport.server.encryptedPasswords ) {
+                accountPassword = auth.getAnsiHash( session.transport.server.encryptionKey );
+                passwordLength = accountPassword.length;
+                unicodePassword = auth.getUnicodeHash( session.transport.server.encryptionKey );
+                unicodePasswordLength = unicodePassword.length;
+                // prohibit HTTP auth attempts for the null session
+                if (unicodePasswordLength == 0 && passwordLength == 0) {
+                    throw new RuntimeException("Null setup prohibited.");
+                }
+            } else if( DISABLE_PLAIN_TEXT_PASSWORDS ) {
+                throw new RuntimeException( "Plain text passwords are disabled" );
+            } else if( useUnicode ) {
+                // plain text
+                String password = auth.getPassword();
+                accountPassword = new byte[0];
+                passwordLength = 0;
+                unicodePassword = new byte[(password.length() + 1) * 2];
+                unicodePasswordLength = writeString( password, unicodePassword, 0 );
+            } else {
+                // plain text
+                String password = auth.getPassword();
+                accountPassword = new byte[(password.length() + 1) * 2];
+                passwordLength = writeString( password, accountPassword, 0 );
+                unicodePassword = new byte[0];
+                unicodePasswordLength = 0;
+            }
+        } else {
+            // no password in session setup
+            passwordLength = unicodePasswordLength = 0;
+        }
+
+        sessionKey = session.transport.sessionKey;
+
         writeInt2( session.transport.snd_buf_size, dst, dstIndex );
         dstIndex += 2;
         writeInt2( session.transport.maxMpxCount, dst, dstIndex );
@@ -114,20 +96,15 @@ class SmbComSessionSetupAndX extends AndXServerMessageBlock {
         dstIndex += 2;
         writeInt4( sessionKey, dst, dstIndex );
         dstIndex += 4;
-        if (blob != null) {
-            writeInt2( blob.length, dst, dstIndex );
-            dstIndex += 2;
-        } else {
-            writeInt2( lmHash.length, dst, dstIndex );
-            dstIndex += 2;
-            writeInt2( ntHash.length, dst, dstIndex );
-            dstIndex += 2;
-        }
+        writeInt2( passwordLength, dst, dstIndex );
+        dstIndex += 2;
+        writeInt2( unicodePasswordLength, dst, dstIndex );
+        dstIndex += 2;
         dst[dstIndex++] = (byte)0x00;
         dst[dstIndex++] = (byte)0x00;
         dst[dstIndex++] = (byte)0x00;
         dst[dstIndex++] = (byte)0x00;
-        writeInt4( capabilities, dst, dstIndex );
+        writeInt4( session.transport.capabilities, dst, dstIndex );
         dstIndex += 4;
 
         return dstIndex - start;
@@ -135,18 +112,26 @@ class SmbComSessionSetupAndX extends AndXServerMessageBlock {
     int writeBytesWireFormat( byte[] dst, int dstIndex ) {
         int start = dstIndex;
 
-        if (blob != null) {
-            System.arraycopy(blob, 0, dst, dstIndex, blob.length );
-            dstIndex += blob.length;
-        } else {
-            System.arraycopy( lmHash, 0, dst, dstIndex, lmHash.length );
-            dstIndex += lmHash.length;
-            System.arraycopy( ntHash, 0, dst, dstIndex, ntHash.length );
-            dstIndex += ntHash.length;
-    
-            dstIndex += writeString( accountName, dst, dstIndex );
-            dstIndex += writeString( primaryDomain, dst, dstIndex );
+        accountName = useUnicode ? auth.username : auth.username.toUpperCase();
+        primaryDomain = auth.domain.toUpperCase();
+
+        if( session.transport.server.security == SECURITY_USER &&
+                        ( auth.hashesExternal || auth.password.length() > 0 )) {
+            System.arraycopy( accountPassword, 0, dst, dstIndex, passwordLength );
+            dstIndex += passwordLength;
+            if (session.transport.server.encryptedPasswords == false && useUnicode) {
+                /* Align Unicode plain text password manually
+                 */
+                if ((( dstIndex - headerStart ) % 2 ) != 0 ) {
+                    dst[dstIndex++] = (byte)'\0';
+                }
+            }
+            System.arraycopy( unicodePassword, 0, dst, dstIndex, unicodePasswordLength );
+            dstIndex += unicodePasswordLength;
         }
+
+        dstIndex += writeString( accountName, dst, dstIndex );
+        dstIndex += writeString( primaryDomain, dst, dstIndex );
         dstIndex += writeString( session.transport.NATIVE_OS, dst, dstIndex );
         dstIndex += writeString( session.transport.NATIVE_LANMAN, dst, dstIndex );
 
@@ -165,9 +150,9 @@ class SmbComSessionSetupAndX extends AndXServerMessageBlock {
             ",maxMpxCount=" + session.transport.maxMpxCount +
             ",VC_NUMBER=" + session.transport.VC_NUMBER +
             ",sessionKey=" + sessionKey +
-            ",lmHash.length=" + (lmHash == null ? 0 : lmHash.length) +
-            ",ntHash.length=" + (ntHash == null ? 0 : ntHash.length) +
-            ",capabilities=" + capabilities +
+            ",passwordLength=" + passwordLength +
+            ",unicodePasswordLength=" + unicodePasswordLength +
+            ",capabilities=" + session.transport.capabilities +
             ",accountName=" + accountName +
             ",primaryDomain=" + primaryDomain +
             ",NATIVE_OS=" + session.transport.NATIVE_OS +

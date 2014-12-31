@@ -71,10 +71,8 @@ public class Type1Message extends NtlmMessage {
      */
     public Type1Message(int flags, String suppliedDomain,
             String suppliedWorkstation) {
-        setFlags(getDefaultFlags() | flags);
+        setFlags(flags);
         setSuppliedDomain(suppliedDomain);
-        if (suppliedWorkstation == null)
-            suppliedWorkstation = getDefaultWorkstation();
         setSuppliedWorkstation(suppliedWorkstation);
     }
 
@@ -169,9 +167,29 @@ public class Type1Message extends NtlmMessage {
     public String toString() {
         String suppliedDomain = getSuppliedDomain();
         String suppliedWorkstation = getSuppliedWorkstation();
-        return "Type1Message[suppliedDomain=" + (suppliedDomain == null ? "null" : suppliedDomain) +
-                ",suppliedWorkstation=" + (suppliedWorkstation == null ? "null" : suppliedWorkstation) +
-                ",flags=0x" + jcifs.util.Hexdump.toHexString(getFlags(), 8) + "]";
+        int flags = getFlags();
+        StringBuffer buffer = new StringBuffer();
+        if (suppliedDomain != null) {
+            buffer.append("suppliedDomain: ").append(suppliedDomain);
+        }
+        if (suppliedWorkstation != null) {
+            if (buffer.length() > 0) buffer.append("; ");
+            buffer.append("suppliedWorkstation: ").append(suppliedWorkstation);
+        }
+        if (flags != 0) {
+            if (buffer.length() > 0) buffer.append("; ");
+            buffer.append("flags: ");
+            buffer.append("0x");
+            buffer.append(Integer.toHexString((flags >> 28) & 0x0f));
+            buffer.append(Integer.toHexString((flags >> 24) & 0x0f));
+            buffer.append(Integer.toHexString((flags >> 20) & 0x0f));
+            buffer.append(Integer.toHexString((flags >> 16) & 0x0f));
+            buffer.append(Integer.toHexString((flags >> 12) & 0x0f));
+            buffer.append(Integer.toHexString((flags >> 8) & 0x0f));
+            buffer.append(Integer.toHexString((flags >> 4) & 0x0f));
+            buffer.append(Integer.toHexString(flags & 0x0f));
+        }
+        return buffer.toString();
     }
 
     /**

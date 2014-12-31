@@ -298,7 +298,7 @@ public final class NbtAddress {
         addr = getCachedAddress( name );
 
         if( addr == null ) {
-            /* This is almost exactly like InetAddress.java. See the
+            /* This was copied amost verbatim from InetAddress.java. See the
              * comments there for a description of how the LOOKUP_TABLE prevents
              * redundant queries from going out on the wire.
              */
@@ -788,13 +788,9 @@ public final class NbtAddress {
  */ 
 
     public String getHostName() {
-        /* 2010 - We no longer try a Node Status to get the
-         * hostname because apparently some servers do not respond
-         * anymore. I think everyone post Windows 98 will accept
-         * an IP address as the tconHostName which is the principal
-         * use of this method.
-         */
-        if (hostName == UNKNOWN_NAME) {
+        try {
+            checkData();
+        } catch( UnknownHostException uhe ) {
             return getHostAddress();
         }
         return hostName.name;

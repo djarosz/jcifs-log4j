@@ -564,7 +564,7 @@ public class NtlmHttpURLConnection extends HttpURLConnection {
             }
             Type2Message type2 = (Type2Message) message;
             message = new Type3Message(type2, password, domain, user,
-                    Type3Message.getDefaultWorkstation(), 0);
+                    Type3Message.getDefaultWorkstation());
         }
         return message;
     }

@@ -38,17 +38,6 @@ public class DcerpcPipeHandle extends DcerpcHandle {
                 throws UnknownHostException, MalformedURLException, DcerpcException {
         binding = DcerpcHandle.parseBinding(url);
         url = "smb://" + binding.server + "/IPC$/" + binding.endpoint.substring(6);
-
-        String params = "", server, address;
-        server = (String)binding.getOption("server");
-        if (server != null)
-            params += "&server=" + server;
-        address = (String)binding.getOption("address");
-        if (server != null)
-            params += "&address=" + address;
-        if (params.length() > 0)
-            url += "?" + params.substring(1);
-
         pipe = new SmbNamedPipe(url,
                 /* This 0x20000 bit is going to get chopped! */
                 (0x2019F << 16) | SmbNamedPipe.PIPE_TYPE_RDWR | SmbNamedPipe.PIPE_TYPE_DCE_TRANSACT,
@@ -59,9 +48,6 @@ public class DcerpcPipeHandle extends DcerpcHandle {
                     int off,
                     int length,
                     boolean isDirect) throws IOException {
-        if (out != null && out.isOpen() == false)
-            throw new IOException("DCERPC pipe is no longer open");
-
         if (in == null)
             in = (SmbFileInputStream)pipe.getNamedPipeInputStream();
         if (out == null)
@@ -100,7 +86,6 @@ public class DcerpcPipeHandle extends DcerpcHandle {
         }
     }
     public void close() throws IOException {
-        state = 0;
         if (out != null)
             out.close();
     }

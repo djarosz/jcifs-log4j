@@ -17,29 +17,8 @@ public class SigningDigest implements SmbConstants {
 
     private MessageDigest digest;
     private byte[] macSigningKey;
-    private boolean bypass = false;
     private int updates;
     private int signSequence;
-
-    public SigningDigest(byte[] macSigningKey, boolean bypass) throws SmbException {
-        try {
-            digest = MessageDigest.getInstance("MD5");
-        } catch (NoSuchAlgorithmException ex) {
-            if( log.level > 0 )
-                ex.printStackTrace( log );
-            throw new SmbException( "MD5", ex );
-        }
-
-        this.macSigningKey = macSigningKey;
-        this.bypass = bypass;
-        this.updates = 0;
-        this.signSequence = 0;
-
-        if( log.level >= 5 ) {
-            log.println("macSigningKey:");
-            Hexdump.hexdump( log, macSigningKey, 0, macSigningKey.length );
-        }
-    }
 
     public SigningDigest( SmbTransport transport,
                 NtlmPasswordAuthentication auth ) throws SmbException {
@@ -135,10 +114,6 @@ public class SigningDigest implements SmbConstants {
             ServerMessageBlock.writeInt4(signSequence, data, index);
             update(data, offset, length);
             System.arraycopy(digest(), 0, data, index, 8);
-            if (bypass) {
-                bypass = false;
-                System.arraycopy("BSRSPYL ".getBytes(), 0, data, index, 8);
-            }
         } catch (Exception ex) {
             if( log.level > 0 )
                 ex.printStackTrace( log );

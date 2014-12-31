@@ -15,7 +15,6 @@ interface SmbConstants {
     static final int DEFAULT_RCV_BUF_SIZE = 60416;
     static final int DEFAULT_SND_BUF_SIZE = 16644;
     static final int DEFAULT_SSN_LIMIT = 250;
-    static final int DEFAULT_CONN_TIMEOUT = 35000;
 
     static final InetAddress LADDR = Config.getLocalHost();
     static final int LPORT = Config.getInt( "jcifs.smb.client.lport", 0 );
@@ -27,10 +26,10 @@ interface SmbConstants {
     static final boolean USE_NTSTATUS = Config.getBoolean( "jcifs.smb.client.useNtStatus", true );
     static final boolean SIGNPREF = Config.getBoolean("jcifs.smb.client.signingPreferred", false );
     static final boolean USE_NTSMBS = Config.getBoolean( "jcifs.smb.client.useNTSmbs", true );
-    static final boolean USE_EXTSEC = Config.getBoolean( "jcifs.smb.client.useExtendedSecurity", true );
+    static final boolean USE_EXTSEC = Config.getBoolean( "jcifs.smb.client.useExtendedSecurity", false );
 
     static final String NETBIOS_HOSTNAME = Config.getProperty( "jcifs.netbios.hostname", null );
-    static final int LM_COMPATIBILITY = Config.getInt( "jcifs.smb.lmCompatibility", 3);
+    static final int LM_COMPATIBILITY = Config.getInt( "jcifs.smb.lmCompatibility", 0);
 
     static final int FLAGS_NONE                           = 0x00;
     static final int FLAGS_LOCK_AND_READ_WRITE_AND_UNLOCK = 0x01;
@@ -63,7 +62,6 @@ interface SmbConstants {
     static final int CAP_LOCK_AND_READ    = 0x0100;
     static final int CAP_NT_FIND          = 0x0200;
     static final int CAP_DFS              = 0x1000;
-    static final int CAP_EXTENDED_SECURITY = 0x80000000;
 
     // file attribute encoding
     static final int ATTR_READONLY   = 0x01;
@@ -128,7 +126,6 @@ interface SmbConstants {
 
     static final boolean USE_BATCHING = Config.getBoolean( "jcifs.smb.client.useBatching", true );
     static final String OEM_ENCODING = Config.getProperty( "jcifs.encoding", Config.DEFAULT_OEM_ENCODING );
-    static final String UNI_ENCODING = "UTF-16LE";
     static final int DEFAULT_FLAGS2 =
                 FLAGS2_LONG_FILENAMES |
                 FLAGS2_EXTENDED_ATTRIBUTES |
@@ -153,8 +150,6 @@ interface SmbConstants {
             Config.getInt( "jcifs.smb.client.ssnLimit", DEFAULT_SSN_LIMIT );
     static final int SO_TIMEOUT =
             Config.getInt( "jcifs.smb.client.soTimeout", DEFAULT_SO_TIMEOUT );
-    static final int CONN_TIMEOUT =
-            Config.getInt( "jcifs.smb.client.connTimeout", DEFAULT_CONN_TIMEOUT );
     static final String NATIVE_OS =
             Config.getProperty( "jcifs.smb.client.nativeOs", System.getProperty( "os.name" ));
     static final String NATIVE_LANMAN =
