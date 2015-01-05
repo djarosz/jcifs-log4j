@@ -19,716 +19,917 @@
 
 package jcifs.smb;
 
-import java.io.*;
-import java.net.*;
-import java.util.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.ConnectException;
+import java.net.InetAddress;
+import java.net.NoRouteToHostException;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.ListIterator;
 
-import jcifs.*;
-import jcifs.netbios.*;
-import jcifs.util.*;
-import jcifs.util.transport.*;
-import jcifs.dcerpc.*;
-import jcifs.dcerpc.msrpc.*;
+import jcifs.UniAddress;
+import jcifs.dcerpc.DcerpcHandle;
+import jcifs.dcerpc.msrpc.MsrpcDfsRootEnum;
+import jcifs.netbios.Name;
+import jcifs.netbios.NbtAddress;
+import jcifs.netbios.NbtException;
+import jcifs.netbios.SessionRequestPacket;
+import jcifs.netbios.SessionServicePacket;
+import jcifs.util.Encdec;
+import jcifs.util.Hexdump;
+import jcifs.util.LogStream;
+import jcifs.util.transport.Request;
+import jcifs.util.transport.Response;
+import jcifs.util.transport.Transport;
+import jcifs.util.transport.TransportException;
+
+import org.apache.log4j.Logger;
 
 public class SmbTransport extends Transport implements SmbConstants {
+	private static final Logger log4j = Logger.getLogger(SmbTransport.class);
 
-    static final byte[] BUF = new byte[0xFFFF];
-    static final SmbComNegotiate NEGOTIATE_REQUEST = new SmbComNegotiate();
-    static LogStream log = LogStream.getInstance();
-    static HashMap dfsRoots = null;
+	static final byte[] BUF = new byte[0xFFFF];
+	static final SmbComNegotiate NEGOTIATE_REQUEST = new SmbComNegotiate();
+	static LogStream log = LogStream.getInstance();
+	static HashMap dfsRoots = null;
+	static final LinkedList CONNECTIONS = new LinkedList();
 
-    static synchronized SmbTransport getSmbTransport( UniAddress address, int port ) {
-        return getSmbTransport( address, port, LADDR, LPORT );
-    }
-    static synchronized SmbTransport getSmbTransport( UniAddress address, int port,
-                                    InetAddress localAddr, int localPort ) {
-        SmbTransport conn;
+	static SmbTransport getSmbTransport(UniAddress address, int port) {
+		return getSmbTransport(address, port, LADDR, LPORT);
+	}
 
-        synchronized( CONNECTIONS ) {
-            if( SSN_LIMIT != 1 ) {
-                ListIterator iter = CONNECTIONS.listIterator();
-                while( iter.hasNext() ) {
-                    conn = (SmbTransport)iter.next();
-                    if( conn.matches( address, port, localAddr, localPort ) &&
-                            ( SSN_LIMIT == 0 || conn.sessions.size() < SSN_LIMIT )) {
-                        return conn;
-                    }
-                }
-            }
+	static SmbTransport getSmbTransport(UniAddress address, int port, InetAddress localAddr, int localPort) {
+		SmbTransport conn;
+		synchronized (CONNECTIONS) {
+			if (SSN_LIMIT != 1) {
+				ListIterator iter = CONNECTIONS.listIterator();
+				while (iter.hasNext()) {
+					conn = (SmbTransport) iter.next();
+					if (conn.matches(address, port, localAddr, localPort) && (SSN_LIMIT == 0 || conn.sessions.size() < SSN_LIMIT)) {
+						return conn;
+					}
+				}
+			}
+	
+			conn = new SmbTransport(address, port, localAddr, localPort);
+			CONNECTIONS.add(0, conn);
+		}
+		return conn;
+	}
 
-            conn = new SmbTransport( address, port, localAddr, localPort );
-            CONNECTIONS.add( 0, conn );
-        }
+	class ServerData {
+		private byte flags;
+		private int flags2;
+		private int maxMpxCount;
+		private int maxBufferSize;
+		private int sessionKey;
+		private int capabilities;
+		private String oemDomainName;
+		private int securityMode;
+		private int security;
+		private boolean encryptedPasswords;
+		private boolean signaturesEnabled;
+		private boolean signaturesRequired;
+		private int maxNumberVcs;
+		private int maxRawSize;
+		private long serverTime;
+		private int serverTimeZone;
+		private int encryptionKeyLength;
+		private byte[] encryptionKey;
 
-        return conn;
-    }
+		public synchronized byte getFlags() {
+			return flags;
+		}
 
-    class ServerData {
-        byte flags;
-        int flags2;
-        int maxMpxCount;
-        int maxBufferSize;
-        int sessionKey;
-        int capabilities;
-        String oemDomainName;
-        int securityMode;
-        int security;
-        boolean encryptedPasswords;
-        boolean signaturesEnabled;
-        boolean signaturesRequired;
-        int maxNumberVcs;
-        int maxRawSize;
-        long serverTime;
-        int serverTimeZone;
-        int encryptionKeyLength;
-        byte[] encryptionKey;
-    }
+		public synchronized void setFlags(byte flags) {
+			this.flags = flags;
+		}
 
-    InetAddress localAddr;
-    int localPort;
-    UniAddress address;
-    Socket socket;
-    int port, mid;
-    OutputStream out;
-    InputStream in;
-    byte[] sbuf = new byte[255]; /* small local buffer */
-    SmbComBlankResponse key = new SmbComBlankResponse();
-    long sessionExpiration = System.currentTimeMillis() + SO_TIMEOUT;
-    LinkedList referrals = new LinkedList();
-    SigningDigest digest = null;
-    LinkedList sessions = new LinkedList();
-    ServerData server = new ServerData();
-    /* Negotiated values */
-    int flags2 = FLAGS2;
-    int maxMpxCount = MAX_MPX_COUNT;
-    int snd_buf_size = SND_BUF_SIZE;
-    int rcv_buf_size = RCV_BUF_SIZE;
-    int capabilities = CAPABILITIES;
-    int sessionKey = 0x00000000;
-    boolean useUnicode = USE_UNICODE;
-    String tconHostName;
+		public synchronized int getFlags2() {
+			return flags2;
+		}
 
-    SmbTransport( UniAddress address, int port, InetAddress localAddr, int localPort ) {
-        this.address = address;
-        this.port = port;
-        this.localAddr = localAddr;
-        this.localPort = localPort;
-    }
+		public synchronized void setFlags2(int flags2) {
+			this.flags2 = flags2;
+		}
 
-    synchronized SmbSession getSmbSession() {
-        return getSmbSession( new NtlmPasswordAuthentication( null, null, null ));
-    }
-    synchronized SmbSession getSmbSession( NtlmPasswordAuthentication auth ) {
-        SmbSession ssn;
-        long now;
+		public synchronized int getMaxMpxCount() {
+			return maxMpxCount;
+		}
 
-        ListIterator iter = sessions.listIterator();
-        while( iter.hasNext() ) {
-            ssn = (SmbSession)iter.next();
-            if( ssn.matches( auth )) {
-                ssn.auth = auth;
-                return ssn;
-            }
-        }
+		public synchronized void setMaxMpxCount(int maxMpxCount) {
+			this.maxMpxCount = maxMpxCount;
+		}
 
-                                        /* logoff old sessions */
-        if (SO_TIMEOUT > 0 && sessionExpiration < (now = System.currentTimeMillis())) {
-            sessionExpiration = now + SO_TIMEOUT;
-            iter = sessions.listIterator();
-            while( iter.hasNext() ) {
-                ssn = (SmbSession)iter.next();
-                if( ssn.expiration < now ) {
-                    ssn.logoff( false );
-                }
-            }
-        }
+		public synchronized int getMaxBufferSize() {
+			return maxBufferSize;
+		}
 
-        ssn = new SmbSession( address, port, localAddr, localPort, auth );
-        ssn.transport = this;
-        sessions.add( ssn );
+		public synchronized void setMaxBufferSize(int maxBufferSize) {
+			this.maxBufferSize = maxBufferSize;
+		}
 
-        return ssn;
-    }
-    boolean matches( UniAddress address, int port, InetAddress localAddr, int localPort ) {
-        return address.equals( this.address ) &&
-                    (port == 0 || port == this.port ||
-                            /* port 139 is ok if 445 was requested */
-                            (port == 445 && this.port == 139)) &&
-                    (localAddr == this.localAddr ||
-                            (localAddr != null &&
-                                    localAddr.equals( this.localAddr ))) &&
-                    localPort == this.localPort;
-    }
-    boolean hasCapability( int cap ) throws SmbException {
-        try {
-            connect( RESPONSE_TIMEOUT );
-        } catch( IOException ioe ) {
-            throw new SmbException( ioe.getMessage(), ioe );
-        }
-        return (capabilities & cap) == cap;
-    }
-    boolean isSignatureSetupRequired( NtlmPasswordAuthentication auth ) {
-        return ( flags2 & ServerMessageBlock.FLAGS2_SECURITY_SIGNATURES ) != 0 &&
-                digest == null &&
-                auth != NtlmPasswordAuthentication.NULL &&
-                NtlmPasswordAuthentication.NULL.equals( auth ) == false;
-    }
+		public synchronized int getSessionKey() {
+			return sessionKey;
+		}
 
-    void ssn139() throws IOException {
-        Name calledName = new Name( address.firstCalledName(), 0x20, null );
-        do {
-            if (localAddr == null) {
-                socket = new Socket( address.getHostAddress(), 139 );
-            } else {
-                socket = new Socket( address.getHostAddress(), 139, localAddr, localPort );
-            }
-            socket.setSoTimeout( SO_TIMEOUT );
-            out = socket.getOutputStream();
-            in = socket.getInputStream();
+		public synchronized void setSessionKey(int sessionKey) {
+			this.sessionKey = sessionKey;
+		}
 
-            SessionServicePacket ssp = new SessionRequestPacket( calledName,
-                    NbtAddress.getLocalName() );
-            out.write( sbuf, 0, ssp.writeWireFormat( sbuf, 0 ));
-            if (readn( in, sbuf, 0, 4 ) < 4) {
-                try {
-                    socket.close();
-                } catch(IOException ioe) {
-                }
-                throw new SmbException( "EOF during NetBIOS session request" );
-            }
-            switch( sbuf[0] & 0xFF ) {
-                case SessionServicePacket.POSITIVE_SESSION_RESPONSE:
-                    if( log.level >= 4 )
-                        log.println( "session established ok with " + address );
-                    return;
-                case SessionServicePacket.NEGATIVE_SESSION_RESPONSE:
-                    int errorCode = (int)( in.read() & 0xFF );
-                    switch (errorCode) {
-                        case NbtException.CALLED_NOT_PRESENT:
-                        case NbtException.NOT_LISTENING_CALLED:
-                            socket.close();
-                            break;
-                        default:
-                            disconnect( true );
-                            throw new NbtException( NbtException.ERR_SSN_SRVC, errorCode );
-                    }
-                    break;
-                case -1:
-                    disconnect( true );
-                    throw new NbtException( NbtException.ERR_SSN_SRVC,
-                            NbtException.CONNECTION_REFUSED );
-                default:
-                    disconnect( true );
-                    throw new NbtException( NbtException.ERR_SSN_SRVC, 0 );
-            }
-        } while(( calledName.name = address.nextCalledName()) != null );
+		public synchronized int getCapabilities() {
+			return capabilities;
+		}
 
-        throw new IOException( "Failed to establish session with " + address );
-    }
-    private void negotiate( int port, ServerMessageBlock resp ) throws IOException {
-        /* We cannot use Transport.sendrecv() yet because
-         * the Transport thread is not setup until doConnect()
-         * returns and we want to supress all communication
-         * until we have properly negotiated.
-         */
-        synchronized (sbuf) {
-            /* If jcifs.netbios.hostname is set this *probably* means there
-             * is a policy regarding which hosts a user can connect from. This
-             * requires communicating over port 139 rather than 445.
-             */
-            if (false && NETBIOS_HOSTNAME != null && NETBIOS_HOSTNAME.equals( "" ) == false) {
-                port = 139;
-            }
-            if (port == 139) {
-                ssn139();
-            } else {
-                if (port == 0)
-                    port = DEFAULT_PORT; // 445
-                if (localAddr == null) {
-                    socket = new Socket( address.getHostAddress(), port );
-                } else {
-                    socket = new Socket( address.getHostAddress(), port, localAddr, localPort );
-                }
-                socket.setSoTimeout( SO_TIMEOUT );
-                out = socket.getOutputStream();
-                in = socket.getInputStream();
-            }
+		public synchronized void setCapabilities(int capabilities) {
+			this.capabilities = capabilities;
+		}
 
-            if (++mid == 32000) mid = 1;
-            NEGOTIATE_REQUEST.mid = mid;
-            int n = NEGOTIATE_REQUEST.encode( sbuf, 4 );
-            Encdec.enc_uint32be( n & 0xFFFF, sbuf, 0 ); /* 4 byte ssn msg header */
+		public synchronized String getOemDomainName() {
+			return oemDomainName;
+		}
 
-            if (log.level >= 4) {
-                log.println( NEGOTIATE_REQUEST );
-                if (log.level >= 6) {
-                    Hexdump.hexdump( log, sbuf, 4, n );
-                }
-            }
+		public synchronized void setOemDomainName(String oemDomainName) {
+			this.oemDomainName = oemDomainName;
+		}
 
-            out.write( sbuf, 0, 4 + n );
-            out.flush();
-            /* Note the Transport thread isn't running yet so we can
-             * read from the socket here.
-             */
-            if (peekKey() == null) /* try to read header */
-                throw new IOException( "transport closed in negotiate" );
-            int size = Encdec.dec_uint16be( sbuf, 2 ) & 0xFFFF;
-            if (size < 33 || (4 + size) > sbuf.length ) {
-                throw new IOException( "Invalid payload size: " + size );
-            }
-            readn( in, sbuf, 4 + 32, size - 32 );
-            resp.decode( sbuf, 4 );
+		public synchronized int getSecurityMode() {
+			return securityMode;
+		}
 
-            if (log.level >= 4) {
-                log.println( resp );
-                if (log.level >= 6) {
-                    Hexdump.hexdump( log, sbuf, 4, n );
-                }
-            }
-        }
-    }
-    public void connect() throws SmbException {
-        try {
-            super.connect( RESPONSE_TIMEOUT );
-        } catch( TransportException te ) {
-            throw new SmbException( te.getMessage(), te );
-        }
-    }
-    protected void doConnect() throws IOException {
-        /*
-         * Negotiate Protocol Request / Response
-         */
+		public synchronized void setSecurityMode(int securityMode) {
+			this.securityMode = securityMode;
+		}
 
-        SmbComNegotiateResponse resp = new SmbComNegotiateResponse( server );
-        try {
-            negotiate( port, resp );
-        } catch( ConnectException ce ) {
-            port = (port == 0 || port == DEFAULT_PORT) ? 139 : DEFAULT_PORT;
-            negotiate( port, resp );
-        } catch( NoRouteToHostException nr ) {
-            port = (port == 0 || port == DEFAULT_PORT) ? 139 : DEFAULT_PORT;
-            negotiate( port, resp );
-        }
+		public synchronized int getSecurity() {
+			return security;
+		}
 
-        if( resp.dialectIndex > 10 ) {
-            throw new SmbException( "This client does not support the negotiated dialect." );
-        }
-        if (server.encryptionKeyLength != 8 && LM_COMPATIBILITY == 0) {
-            throw new SmbException("Encryption key length is not 8 as expected. This could indicate that the server requires NTLMv2. JCIFS does not fully support NTLMv2 but you can try setting jcifs.smb.lmCompatibility = 3.");
-        }
+		public synchronized void setSecurity(int security) {
+			this.security = security;
+		}
 
-        /* Adjust negotiated values */
+		public synchronized boolean isEncryptedPasswords() {
+			return encryptedPasswords;
+		}
 
-        tconHostName = address.getHostName();
-        if (server.signaturesRequired || (server.signaturesEnabled && SIGNPREF)) {
-            flags2 |= ServerMessageBlock.FLAGS2_SECURITY_SIGNATURES;
-        } else {
-            flags2 &= 0xFFFF ^ ServerMessageBlock.FLAGS2_SECURITY_SIGNATURES;
-        }
-        maxMpxCount = Math.min( maxMpxCount, server.maxMpxCount );
-        if (maxMpxCount < 1) maxMpxCount = 1;
-        snd_buf_size = Math.min( snd_buf_size, server.maxBufferSize );
-        capabilities &= server.capabilities;
-        if ((capabilities & ServerMessageBlock.CAP_UNICODE) == 0) {
-            // server doesn't want unicode
-            if (FORCE_UNICODE) {
-                capabilities |= ServerMessageBlock.CAP_UNICODE;
-            } else {
-                useUnicode = false;
-                flags2 &= 0xFFFF ^ ServerMessageBlock.FLAGS2_UNICODE;
-            }
-        }
-    }
-    protected void doDisconnect( boolean hard ) throws IOException {
-        ListIterator iter = sessions.listIterator();
-        while (iter.hasNext()) {
-            SmbSession ssn = (SmbSession)iter.next();
-            ssn.logoff( hard );
-        }
-        socket.shutdownOutput();
-        out.close();
-        in.close();
-        socket.close();
-        digest = null;
-    }
+		public synchronized void setEncryptedPasswords(boolean encryptedPasswords) {
+			this.encryptedPasswords = encryptedPasswords;
+		}
 
-    protected void makeKey( Request request ) throws IOException {
-        /* The request *is* the key */
-        if (++mid == 32000) mid = 1;
-        ((ServerMessageBlock)request).mid = mid;
-    }
-    protected Request peekKey() throws IOException {
-        int n;
-        do {
-            if ((n = readn( in, sbuf, 0, 4 )) < 4)
-                return null;
-        } while (sbuf[0] == (byte)0x85);  /* Dodge NetBIOS keep-alive */
-                                                   /* read smb header */
-        if ((n = readn( in, sbuf, 4, 32 )) < 32)
-            return null;
-        if (log.level >= 4) {
-            log.println( "New data read: " + this );
-            jcifs.util.Hexdump.hexdump( log, sbuf, 4, 32 );
-        }
+		public synchronized boolean isSignaturesEnabled() {
+			return signaturesEnabled;
+		}
 
-        for ( ;; ) {
-            /* 01234567
-             * 00SSFSMB
-             * 0 - 0's
-             * S - size of payload
-             * FSMB - 0xFF SMB magic #
-             */
+		public synchronized void setSignaturesEnabled(boolean signaturesEnabled) {
+			this.signaturesEnabled = signaturesEnabled;
+		}
 
-            if (sbuf[0] == (byte)0x00 &&
-                        sbuf[1] == (byte)0x00 &&
-                        sbuf[4] == (byte)0xFF &&
-                        sbuf[5] == (byte)'S' &&
-                        sbuf[6] == (byte)'M' &&
-                        sbuf[7] == (byte)'B') {
-                break; /* all good */
-            }
-                                        /* out of phase maybe? */
-                          /* inch forward 1 byte and try again */
-            for (int i = 0; i < 35; i++) {
-                sbuf[i] = sbuf[i + 1];
-            }
-            int b;
-            if ((b = in.read()) == -1) return null;
-            sbuf[35] = (byte)b;
-        }
+		public synchronized boolean isSignaturesRequired() {
+			return signaturesRequired;
+		}
 
-        key.mid = Encdec.dec_uint16le( sbuf, 34 ) & 0xFFFF;
+		public synchronized void setSignaturesRequired(boolean signaturesRequired) {
+			this.signaturesRequired = signaturesRequired;
+		}
 
-        /* Unless key returned is null or invalid Transport.loop() always
-         * calls doRecv() after and no one else but the transport thread
-         * should call doRecv(). Therefore it is ok to expect that the data
-         * in sbuf will be preserved for copying into BUF in doRecv().
-         */
+		public synchronized int getMaxNumberVcs() {
+			return maxNumberVcs;
+		}
 
-        return key;
-    }
+		public synchronized void setMaxNumberVcs(int maxNumberVcs) {
+			this.maxNumberVcs = maxNumberVcs;
+		}
 
-    protected void doSend( Request request ) throws IOException {
-        synchronized (BUF) {
-            ServerMessageBlock smb = (ServerMessageBlock)request;
-            int n = smb.encode( BUF, 4 );
-            Encdec.enc_uint32be( n & 0xFFFF, BUF, 0 ); /* 4 byte session message header */
-            if (log.level >= 4) {
-                do {
-                    log.println( smb );
-                } while (smb instanceof AndXServerMessageBlock &&
-                        (smb = ((AndXServerMessageBlock)smb).andx) != null);
-                if (log.level >= 6) {
-                    Hexdump.hexdump( log, BUF, 4, n );
-                }
-            }
-            out.write( BUF, 0, 4 + n );
-        }
-    }
-    protected void doSend0( Request request ) throws IOException {
-        try {
-            doSend( request );
-        } catch( IOException ioe ) {
-            if (log.level > 2)
-                ioe.printStackTrace( log );
-            try {
-                disconnect( true );
-            } catch( IOException ioe2 ) {
-                ioe2.printStackTrace( log );
-            }
-            throw ioe;
-        }
-    }
+		public synchronized int getMaxRawSize() {
+			return maxRawSize;
+		}
 
-    protected void doRecv( Response response ) throws IOException {
-        ServerMessageBlock resp = (ServerMessageBlock)response;
-        resp.useUnicode = useUnicode;
+		public synchronized void setMaxRawSize(int maxRawSize) {
+			this.maxRawSize = maxRawSize;
+		}
 
-        synchronized (BUF) {
-            System.arraycopy( sbuf, 0, BUF, 0, 4 + HEADER_LENGTH );
-            int size = Encdec.dec_uint16be( BUF, 2 ) & 0xFFFF;
-            if (size < (HEADER_LENGTH + 1) || (4 + size) > rcv_buf_size ) {
-                throw new IOException( "Invalid payload size: " + size );
-            }
-            int errorCode = Encdec.dec_uint32le( BUF, 9 ) & 0xFFFFFFFF;
-            if (resp.command == ServerMessageBlock.SMB_COM_READ_ANDX &&
-                        (errorCode == 0 ||
-                        errorCode == 0x80000005)) { // overflow indicator normal for pipe
-                SmbComReadAndXResponse r = (SmbComReadAndXResponse)resp;
-                int off = HEADER_LENGTH;
-                                    /* WordCount thru dataOffset always 27 */
-                readn( in, BUF, 4 + off, 27 ); off += 27;
-                resp.decode( BUF, 4 );
-                if (r.dataLength > 0) {
-                    readn( in, BUF, 4 + off, r.dataOffset - off);   /* pad */
-                    readn( in, r.b, r.off, r.dataLength );  /* read direct */
-                }
-            } else {
-                readn( in, BUF, 4 + 32, size - 32 );
-                resp.decode( BUF, 4 );
-                if (resp instanceof SmbComTransactionResponse) {
-                    ((SmbComTransactionResponse)resp).nextElement();
-                }
-            }
+		public synchronized long getServerTime() {
+			return serverTime;
+		}
 
-            /* Verification fails (w/ W2K3 server at least) if status is not 0. This
-             * suggests MS doesn't compute the signature (correctly) for error responses
-             * (perhaps for DOS reasons).
-             */
-            if (digest != null && resp.errorCode == 0) {
-                digest.verify( BUF, 4, resp );
-            }
+		public synchronized void setServerTime(long serverTime) {
+			this.serverTime = serverTime;
+		}
 
-            if (log.level >= 4) {
-                log.println( response );
-                if (log.level >= 6) {
-                    Hexdump.hexdump( log, BUF, 4, size );
-                }
-            }
-        }
-    }
-    protected void doSkip() throws IOException {
-        int size = Encdec.dec_uint16be( sbuf, 2 ) & 0xFFFF;
-        if (size < 33 || (4 + size) > rcv_buf_size ) {
-            /* log message? */
-            in.skip( in.available() );
-        } else {
-            in.skip( size - 32 );
-        }
-    }
-    void checkStatus( ServerMessageBlock req, ServerMessageBlock resp ) throws SmbException {
-        resp.errorCode = SmbException.getStatusByCode( resp.errorCode );
-        switch( resp.errorCode ) {
-            case NtStatus.NT_STATUS_OK:
-                break;
-            case NtStatus.NT_STATUS_ACCESS_DENIED:
-            case NtStatus.NT_STATUS_WRONG_PASSWORD:
-            case NtStatus.NT_STATUS_LOGON_FAILURE:
-            case NtStatus.NT_STATUS_ACCOUNT_RESTRICTION:
-            case NtStatus.NT_STATUS_INVALID_LOGON_HOURS:
-            case NtStatus.NT_STATUS_INVALID_WORKSTATION:
-            case NtStatus.NT_STATUS_PASSWORD_EXPIRED:
-            case NtStatus.NT_STATUS_ACCOUNT_DISABLED:
-            case NtStatus.NT_STATUS_ACCOUNT_LOCKED_OUT:
-            case NtStatus.NT_STATUS_TRUSTED_DOMAIN_FAILURE:
-                throw new SmbAuthException( resp.errorCode );
-            case NtStatus.NT_STATUS_PATH_NOT_COVERED:
-                if( req.auth == null ) {
-                    throw new SmbException( resp.errorCode, null );
-                }
+		public synchronized int getServerTimeZone() {
+			return serverTimeZone;
+		}
 
-                DfsReferral[] drs = getDfsReferrals(req.auth, req.path, 1);
-                SmbFile.dfs.insert(req.path, drs[0]);
-                throw drs[0];
-            case 0x80000005:  /* STATUS_BUFFER_OVERFLOW */
-                break; /* normal for DCERPC named pipes */
-            default:
-                throw new SmbException( resp.errorCode, null );
-        }
-        if (resp.verifyFailed) {
-            throw new SmbException( "Signature verification failed." );
-        }
-    }
-    void send( ServerMessageBlock request, ServerMessageBlock response ) throws SmbException {
+		public synchronized void setServerTimeZone(int serverTimeZone) {
+			this.serverTimeZone = serverTimeZone;
+		}
 
-        connect(); /* must negotiate before we can test flags2, useUnicode, etc */
+		public synchronized int getEncryptionKeyLength() {
+			return encryptionKeyLength;
+		}
 
-        request.flags2 |= flags2;
-        request.useUnicode = useUnicode;
-        request.response = response; /* needed by sign */
-        if (request.digest == null)
-            request.digest = digest; /* for sign called in encode */
+		public synchronized void setEncryptionKeyLength(int encryptionKeyLength) {
+			this.encryptionKeyLength = encryptionKeyLength;
+		}
 
-        try {
-            if (response == null) {
-                doSend0( request );
-                return;
-            } else if (request instanceof SmbComTransaction) {
-                response.command = request.command;
-                SmbComTransaction req = (SmbComTransaction)request;
-                SmbComTransactionResponse resp = (SmbComTransactionResponse)response;
+		public synchronized byte[] getEncryptionKey() {
+			return encryptionKey;
+		}
 
-                req.maxBufferSize = snd_buf_size;
-                resp.reset();
+		public synchronized void setEncryptionKey(byte[] encryptionKey) {
+			this.encryptionKey = encryptionKey;
+		}
+	}
 
-                try {
-                    BufferCache.getBuffers( req, resp );
+	InetAddress localAddr;
+	int localPort;
+	UniAddress address;
+	Socket socket;
+	int port, mid;
+	OutputStream out;
+	InputStream in;
+	byte[] sbuf = new byte[255]; /* small local buffer */
+	SmbComBlankResponse key = new SmbComBlankResponse();
+	long sessionExpiration = System.currentTimeMillis() + SO_TIMEOUT;
+	LinkedList referrals = new LinkedList();
+	SigningDigest digest = null;
+	List sessions = Collections.synchronizedList(new LinkedList());
+	ServerData server = new ServerData();
+	/* Negotiated values */
+	int flags2 = FLAGS2;
+	int maxMpxCount = MAX_MPX_COUNT;
+	int snd_buf_size = SND_BUF_SIZE;
+	int rcv_buf_size = RCV_BUF_SIZE;
+	int capabilities = CAPABILITIES;
+	int sessionKey = 0x00000000;
+	boolean useUnicode = USE_UNICODE;
+	String tconHostName;
+	private Thread sessionTimeoutThread;
 
-                    /* 
-                     * First request w/ interim response
-                     */ 
+	SmbTransport(UniAddress address, int port, InetAddress localAddr, int localPort) {
+		this.address = address;
+		this.port = port;
+		this.localAddr = localAddr;
+		this.localPort = localPort;
+		startSessionTimeoutThread();		
+	}
 
-                    req.nextElement();
-                    if (req.hasMoreElements()) {
-                        SmbComBlankResponse interim = new SmbComBlankResponse();
-                        super.sendrecv( req, interim, RESPONSE_TIMEOUT );
-                        if (interim.errorCode != 0) {
-                            checkStatus( req, interim );
-                        }
-                        req.nextElement();
-                    } else {
-                        makeKey( req );
-                    }
+	SmbSession getSmbSession() {
+		return getSmbSession(new NtlmPasswordAuthentication(null, null, null));
+	}
 
-                    synchronized (response_map) {
-                        response.received = false;
-                        resp.isReceived = false;
-                        try {
-                            response_map.put( req, resp );
+	SmbSession getSmbSession(NtlmPasswordAuthentication auth) {
+		SmbSession ssn;
+		synchronized (sessions) {
+			ListIterator iter = sessions.listIterator();
+			while (iter.hasNext()) {
+				ssn = (SmbSession) iter.next();
+				if (ssn.matches(auth)) {
+					ssn.auth = auth;
+					return ssn;
+				}
+			}
+	
+			ssn = new SmbSession(address, port, localAddr, localPort, auth);
+			ssn.transport = this;
+			sessions.add(ssn);
+		}
+		return ssn;
+	}
 
-                            /* 
-                             * Send multiple fragments
-                             */
+	private synchronized void timeoutSession() {
+		long now = System.currentTimeMillis();
+		List copyOfSessions = new ArrayList();
+		synchronized (sessions) {
+			copyOfSessions.addAll(sessions);
+		}
+		ListIterator iter = copyOfSessions.listIterator();
+		SmbSession ssn;
+		/* logoff old sessions */
+		while (iter.hasNext()) {
+			ssn = (SmbSession) iter.next();
+			if (ssn.expiration < now) {
+				log4j.info("Logoff timeouted session: " + ssn);
+				ssn.logoff(false);
+				sessions.remove(ssn);
+			}
+		}
+	}
 
-                            do {
-                                doSend0( req );
-                            } while( req.hasMoreElements() && req.nextElement() != null );
+	private void startSessionTimeoutThread() {
+		if (sessionTimeoutThread == null) {
+			sessionTimeoutThread = new Thread("JCIFS-TimeoutThread-" + address + ":" + port) {
+				public void run() {
+					while (true) {
+						try {
+							timeoutSession();
+							sleep(SO_TIMEOUT);
+						} catch (Throwable e) {
+							log4j.error("Error in session timeout thread: ", e);
+							Thread.interrupted();
+						}
+					}
+				}
+			};
+			sessionTimeoutThread.setDaemon(true);
+			sessionTimeoutThread.start();
+		}
+	}
 
-                            /* 
-                             * Receive multiple fragments
-                             */
+	boolean matches(UniAddress address, int port, InetAddress localAddr, int localPort) {
+		return address.equals(this.address) && (port == 0 || port == this.port ||
+		/* port 139 is ok if 445 was requested */
+		(port == 445 && this.port == 139)) && (localAddr == this.localAddr || (localAddr != null && localAddr.equals(this.localAddr)))
+				&& localPort == this.localPort;
+	}
 
-                            long timeout = RESPONSE_TIMEOUT;
-                            resp.expiration = System.currentTimeMillis() + timeout;
-                            while( resp.hasMoreElements() ) {
-                                response_map.wait( timeout );
-                                timeout = resp.expiration - System.currentTimeMillis();
-                                if (timeout <= 0) {
-                                    throw new TransportException( this +
-                                            " timedout waiting for response to " +
-                                            req );
-                                }
-                            }
-                            if (response.errorCode != 0) {
-                                checkStatus( req, resp );
-                            }
-                        } catch( InterruptedException ie ) {
-                            throw new TransportException( ie );
-                        } finally {
-                            response_map.remove( req );
-                        }
-                    }
-                } finally {
-                    BufferCache.releaseBuffer( req.txn_buf );
-                    BufferCache.releaseBuffer( resp.txn_buf );
-                }
+	boolean hasCapability(int cap) throws SmbException {
+		try {
+			connect(RESPONSE_TIMEOUT);
+		} catch (IOException ioe) {
+			throw new SmbException(ioe.getMessage(), ioe);
+		}
+		return (capabilities & cap) == cap;
+	}
 
-            } else {
-                response.command = request.command;
-                super.sendrecv( request, response, RESPONSE_TIMEOUT );
-            }
-        } catch( SmbException se ) {
-            throw se;
-        } catch( InterruptedException ie ) {
-            throw new SmbException( ie.getMessage(), ie );
-        } catch( IOException ioe ) {
-            throw new SmbException( ioe.getMessage(), ioe );
-        }
+	boolean isSignatureSetupRequired(NtlmPasswordAuthentication auth) {
+		return (flags2 & ServerMessageBlock.FLAGS2_SECURITY_SIGNATURES) != 0 && digest == null && auth != NtlmPasswordAuthentication.NULL
+				&& NtlmPasswordAuthentication.NULL.equals(auth) == false;
+	}
 
-        checkStatus( request, response );
-    }
-    public String toString() {
-        return super.toString() + "[" + address + ":" + port + "]";
-    }
+	void ssn139() throws IOException {
+		Name calledName = new Name(address.firstCalledName(), 0x20, null);
+		do {
+			if (localAddr == null) {
+				socket = new Socket(address.getHostAddress(), 139);
+			} else {
+				socket = new Socket(address.getHostAddress(), 139, localAddr, localPort);
+			}
+			socket.setSoTimeout(SO_TIMEOUT);
+			out = socket.getOutputStream();
+			in = socket.getInputStream();
 
-    /* DFS */
+			SessionServicePacket ssp = new SessionRequestPacket(calledName, NbtAddress.getLocalName());
+			out.write(sbuf, 0, ssp.writeWireFormat(sbuf, 0));
+			if (readn(in, sbuf, 0, 4) < 4) {
+				try {
+					socket.close();
+				} catch (IOException ioe) {
+				}
+				throw new SmbException("EOF during NetBIOS session request");
+			}
+			switch (sbuf[0] & 0xFF) {
+			case SessionServicePacket.POSITIVE_SESSION_RESPONSE:
+				if (log.level >= 4)
+					log.println("session established ok with " + address);
+				return;
+			case SessionServicePacket.NEGATIVE_SESSION_RESPONSE:
+				int errorCode = (in.read() & 0xFF);
+				switch (errorCode) {
+				case NbtException.CALLED_NOT_PRESENT:
+				case NbtException.NOT_LISTENING_CALLED:
+					socket.close();
+					break;
+				default:
+					disconnect(true);
+					throw new NbtException(NbtException.ERR_SSN_SRVC, errorCode);
+				}
+				break;
+			case -1:
+				disconnect(true);
+				throw new NbtException(NbtException.ERR_SSN_SRVC, NbtException.CONNECTION_REFUSED);
+			default:
+				disconnect(true);
+				throw new NbtException(NbtException.ERR_SSN_SRVC, 0);
+			}
+		} while ((calledName.name = address.nextCalledName()) != null);
 
-    /* Split DFS path like \fs1.example.com\root5\link2\foo\bar.txt into at
-     * most 3 components (not including the first index which is always empty):
-     * result[0] = ""
-     * result[1] = "fs1.example.com"
-     * result[2] = "root5"
-     * result[3] = "link2\foo\bar.txt"
-     */
-    void dfsPathSplit(String path, String[] result)
-    {
-        int ri = 0, rlast = result.length - 1;
-        int i = 0, b = 0, len = path.length();
+		throw new IOException("Failed to establish session with " + address);
+	}
 
-        do {
-            if (ri == rlast) {
-                result[rlast] = path.substring(b);
-                return;
-            }
-            if (i == len || path.charAt(i) == '\\') {
-                result[ri++] = path.substring(b, i);
-                b = i + 1;
-            }
-        } while (i++ < len);
+	private void negotiate(int port, ServerMessageBlock resp) throws IOException {
+		/* We cannot use Transport.sendrecv() yet because
+		 * the Transport thread is not setup until doConnect()
+		 * returns and we want to supress all communication
+		 * until we have properly negotiated.
+		 */
+		synchronized (sbuf) {
+			/* If jcifs.netbios.hostname is set this *probably* means there
+			 * is a policy regarding which hosts a user can connect from. This
+			 * requires communicating over port 139 rather than 445.
+			 */
+			if (false && NETBIOS_HOSTNAME != null && NETBIOS_HOSTNAME.equals("") == false) {
+				port = 139;
+			}
+			if (port == 139) {
+				ssn139();
+			} else {
+				if (port == 0)
+					port = DEFAULT_PORT; // 445
+				if (localAddr == null) {
+					socket = new Socket(address.getHostAddress(), port);
+				} else {
+					socket = new Socket(address.getHostAddress(), port, localAddr, localPort);
+				}
+				socket.setSoTimeout(SO_TIMEOUT);
+				out = socket.getOutputStream();
+				in = socket.getInputStream();
+			}
 
-        while (ri < result.length) {
-            result[ri++] = "";
-        }
-    }
-    DfsReferral[] getDfsReferrals(NtlmPasswordAuthentication auth,
-                String path,
-                int rn) throws SmbException {
-        SmbTree ipc = getSmbSession( auth ).getSmbTree( "IPC$", null );
-        Trans2GetDfsReferralResponse resp = new Trans2GetDfsReferralResponse();
-        ipc.send( new Trans2GetDfsReferral( path ), resp );
+			if (++mid == 32000)
+				mid = 1;
+			NEGOTIATE_REQUEST.mid = mid;
+			int n = NEGOTIATE_REQUEST.encode(sbuf, 4);
+			Encdec.enc_uint32be(n & 0xFFFF, sbuf, 0); /* 4 byte ssn msg header */
 
-        if (rn == 0 || resp.numReferrals < rn) {
-            rn = resp.numReferrals;
-        }
+			if (log.level >= 4) {
+				log.println(NEGOTIATE_REQUEST);
+				if (log.level >= 6) {
+					Hexdump.hexdump(log, sbuf, 4, n);
+				}
+			}
 
-        DfsReferral[] drs = new DfsReferral[rn];
-        String[] arr = new String[4];
-        long expiration = System.currentTimeMillis() + Dfs.TTL * 1000;
+			out.write(sbuf, 0, 4 + n);
+			out.flush();
+			/* Note the Transport thread isn't running yet so we can
+			 * read from the socket here.
+			 */
+			if (peekKey() == null) /* try to read header */
+				throw new IOException("transport closed in negotiate");
+			int size = Encdec.dec_uint16be(sbuf, 2) & 0xFFFF;
+			if (size < 33 || (4 + size) > sbuf.length) {
+				throw new IOException("Invalid payload size: " + size);
+			}
+			readn(in, sbuf, 4 + 32, size - 32);
+			resp.decode(sbuf, 4);
 
-        for (int di = 0; di < drs.length; di++) {
-            DfsReferral dr = new DfsReferral();
-                        /* NTLM HTTP Authentication must be re-negotiated
-                         * with challenge from 'server' to access DFS vol. */
-            dr.resolveHashes = auth.hashesExternal;
-            dr.ttl = resp.referrals[di].ttl;
-            dr.expiration = expiration;
-            if (path.equals("")) {
-                dr.server = resp.referrals[di].path.substring(1).toLowerCase();
-            } else {
-                dfsPathSplit(resp.referrals[di].node, arr);
-                dr.server = arr[1];
-                dr.share = arr[2];
-                dr.path = arr[3];
-            }
-            dr.pathConsumed = resp.pathConsumed;
-            drs[di] = dr;
-        }
+			if (log.level >= 4) {
+				log.println(resp);
+				if (log.level >= 6) {
+					Hexdump.hexdump(log, sbuf, 4, n);
+				}
+			}
+		}
+	}
 
-        return drs;
-    }
-    FileEntry[] getDfsRoots(String domainName, NtlmPasswordAuthentication auth) throws IOException {
-        MsrpcDfsRootEnum rpc;
-        DcerpcHandle handle = null;
+	public void connect() throws SmbException {
+		try {
+			super.connect(RESPONSE_TIMEOUT);
+		} catch (TransportException te) {
+			throw new SmbException(te.getMessage(), te);
+		}
+	}
 
-        /* Procedure:
-         * Lookup a DC in the target domain
-         * Ask the DC for a referral for the domain (e.g. "\example.com")
-         * Do NetrDfsEnumEx on the server returned in the referral to
-         * get roots in target domain
-         */
+	protected void doConnect() throws IOException {
+		/*
+		 * Negotiate Protocol Request / Response
+		 */
 
-        UniAddress dc = UniAddress.getByName(domainName);
-        SmbTransport trans = SmbTransport.getSmbTransport(dc, 0);
-        DfsReferral[] dr = trans.getDfsReferrals(auth, "\\" + domainName, 1);
+		SmbComNegotiateResponse resp = new SmbComNegotiateResponse(server);
+		
+		if (NbtAddress.localhostSet) {   
+			port = 139;   
+		} 
+					
+		try {
+			negotiate(port, resp);
+		} catch (ConnectException ce) {
+			if (NbtAddress.localhostSet)   
+				                throw ce; 
+							
+			port = (port == 0 || port == DEFAULT_PORT) ? 139 : DEFAULT_PORT;
+			negotiate(port, resp);
+		} catch (NoRouteToHostException nr) {
+			port = (port == 0 || port == DEFAULT_PORT) ? 139 : DEFAULT_PORT;
+			negotiate(port, resp);
+		}
 
-        handle = DcerpcHandle.getHandle("ncacn_np:" +
-                    UniAddress.getByName(dr[0].server).getHostAddress() +
-                    "[\\PIPE\\netdfs]", auth);
-        try {
-            rpc = new MsrpcDfsRootEnum(domainName);
-            handle.sendrecv(rpc);
-            if (rpc.retval != 0)
-                throw new SmbException(rpc.retval, true);
-            return rpc.getEntries();
-        } finally {
-            try {
-                handle.close();
-            } catch(IOException ioe) {
-                if (log.level >= 4)
-                    ioe.printStackTrace(log);
-            }
-        }
-    }
+		if (resp.dialectIndex > 10) {
+			throw new SmbException("This client does not support the negotiated dialect.");
+		}
+		if (server.encryptionKeyLength != 8 && LM_COMPATIBILITY == 0) {
+			throw new SmbException(
+					"Encryption key length is not 8 as expected. This could indicate that the server requires NTLMv2. JCIFS does not fully support NTLMv2 but you can try setting jcifs.smb.lmCompatibility = 3.");
+		}
+
+		/* Adjust negotiated values */
+
+		tconHostName = address.getHostName();
+		if (server.signaturesRequired || (server.signaturesEnabled && SIGNPREF)) {
+			flags2 |= ServerMessageBlock.FLAGS2_SECURITY_SIGNATURES;
+		} else {
+			flags2 &= 0xFFFF ^ ServerMessageBlock.FLAGS2_SECURITY_SIGNATURES;
+		}
+		maxMpxCount = Math.min(maxMpxCount, server.maxMpxCount);
+		if (maxMpxCount < 1)
+			maxMpxCount = 1;
+		snd_buf_size = Math.min(snd_buf_size, server.maxBufferSize);
+		capabilities &= server.capabilities;
+		if ((capabilities & ServerMessageBlock.CAP_UNICODE) == 0) {
+			// server doesn't want unicode
+			if (FORCE_UNICODE) {
+				capabilities |= ServerMessageBlock.CAP_UNICODE;
+			} else {
+				useUnicode = false;
+				flags2 &= 0xFFFF ^ ServerMessageBlock.FLAGS2_UNICODE;
+			}
+		}
+	}
+
+	protected void doDisconnect(boolean hard) throws IOException {
+		synchronized (sessions) {
+			ListIterator iter = sessions.listIterator();
+			while (iter.hasNext()) {
+				SmbSession ssn = (SmbSession) iter.next();
+				ssn.logoff(hard);
+			}
+		}
+		socket.shutdownOutput();
+		out.close();
+		in.close();
+		socket.close();
+		digest = null;
+	}
+
+	protected void makeKey(Request request) throws IOException {
+		/* The request *is* the key */
+		if (++mid == 32000)
+			mid = 1;
+		((ServerMessageBlock) request).mid = mid;
+	}
+
+	protected Request peekKey() throws IOException {
+		int n;
+		do {
+			if ((n = readn(in, sbuf, 0, 4)) < 4)
+				return null;
+		} while (sbuf[0] == (byte) 0x85); /* Dodge NetBIOS keep-alive */
+		/* read smb header */
+		if ((n = readn(in, sbuf, 4, 32)) < 32)
+			return null;
+		if (log.level >= 4) {
+			log.println("New data read: " + this);
+			jcifs.util.Hexdump.hexdump(log, sbuf, 4, 32);
+		}
+
+		for (;;) {
+			/* 01234567
+			 * 00SSFSMB
+			 * 0 - 0's
+			 * S - size of payload
+			 * FSMB - 0xFF SMB magic #
+			 */
+
+			if (sbuf[0] == (byte) 0x00 && sbuf[1] == (byte) 0x00 && sbuf[4] == (byte) 0xFF && sbuf[5] == (byte) 'S' && sbuf[6] == (byte) 'M'
+					&& sbuf[7] == (byte) 'B') {
+				break; /* all good */
+			}
+			/* out of phase maybe? */
+			/* inch forward 1 byte and try again */
+			for (int i = 0; i < 35; i++) {
+				sbuf[i] = sbuf[i + 1];
+			}
+			int b;
+			if ((b = in.read()) == -1)
+				return null;
+			sbuf[35] = (byte) b;
+		}
+
+		key.mid = Encdec.dec_uint16le(sbuf, 34) & 0xFFFF;
+
+		/* Unless key returned is null or invalid Transport.loop() always
+		 * calls doRecv() after and no one else but the transport thread
+		 * should call doRecv(). Therefore it is ok to expect that the data
+		 * in sbuf will be preserved for copying into BUF in doRecv().
+		 */
+
+		return key;
+	}
+
+	protected void doSend(Request request) throws IOException {
+		synchronized (BUF) {
+			ServerMessageBlock smb = (ServerMessageBlock) request;
+			int n = smb.encode(BUF, 4);
+			Encdec.enc_uint32be(n & 0xFFFF, BUF, 0); /* 4 byte session message header */
+			if (log.level >= 4) {
+				do {
+					log.println(smb);
+				} while (smb instanceof AndXServerMessageBlock && (smb = ((AndXServerMessageBlock) smb).andx) != null);
+				if (log.level >= 6) {
+					Hexdump.hexdump(log, BUF, 4, n);
+				}
+			}
+			out.write(BUF, 0, 4 + n);
+		}
+	}
+
+	protected void doSend0(Request request) throws IOException {
+		try {
+			doSend(request);
+		} catch (IOException ioe) {
+			if (log.level > 2)
+				ioe.printStackTrace(log);
+			try {
+				disconnect(true);
+			} catch (IOException ioe2) {
+				ioe2.printStackTrace(log);
+			}
+			throw ioe;
+		}
+	}
+
+	protected void doRecv(Response response) throws IOException {
+		ServerMessageBlock resp = (ServerMessageBlock) response;
+		resp.useUnicode = useUnicode;
+
+		synchronized (BUF) {
+			System.arraycopy(sbuf, 0, BUF, 0, 4 + HEADER_LENGTH);
+			int size = Encdec.dec_uint16be(BUF, 2) & 0xFFFF;
+			if (size < (HEADER_LENGTH + 1) || (4 + size) > rcv_buf_size) {
+				throw new IOException("Invalid payload size: " + size);
+			}
+			int errorCode = Encdec.dec_uint32le(BUF, 9) & 0xFFFFFFFF;
+			if (resp.command == ServerMessageBlock.SMB_COM_READ_ANDX && (errorCode == 0 || errorCode == 0x80000005)) { // overflow indicator normal for pipe
+				SmbComReadAndXResponse r = (SmbComReadAndXResponse) resp;
+				int off = HEADER_LENGTH;
+				/* WordCount thru dataOffset always 27 */
+				readn(in, BUF, 4 + off, 27);
+				off += 27;
+				resp.decode(BUF, 4);
+				if (r.dataLength > 0) {
+					readn(in, BUF, 4 + off, r.dataOffset - off); /* pad */
+					readn(in, r.b, r.off, r.dataLength); /* read direct */
+				}
+			} else {
+				readn(in, BUF, 4 + 32, size - 32);
+				resp.decode(BUF, 4);
+				if (resp instanceof SmbComTransactionResponse) {
+					((SmbComTransactionResponse) resp).nextElement();
+				}
+			}
+
+			/* Verification fails (w/ W2K3 server at least) if status is not 0. This
+			 * suggests MS doesn't compute the signature (correctly) for error responses
+			 * (perhaps for DOS reasons).
+			 */
+			if (digest != null && resp.errorCode == 0) {
+				digest.verify(BUF, 4, resp);
+			}
+
+			if (log.level >= 4) {
+				log.println(response);
+				if (log.level >= 6) {
+					Hexdump.hexdump(log, BUF, 4, size);
+				}
+			}
+		}
+	}
+
+	protected void doSkip() throws IOException {
+		int size = Encdec.dec_uint16be(sbuf, 2) & 0xFFFF;
+		if (size < 33 || (4 + size) > rcv_buf_size) {
+			/* log message? */
+			in.skip(in.available());
+		} else {
+			in.skip(size - 32);
+		}
+	}
+
+	void checkStatus(ServerMessageBlock req, ServerMessageBlock resp) throws SmbException {
+		resp.errorCode = SmbException.getStatusByCode(resp.errorCode);
+		switch (resp.errorCode) {
+		case NtStatus.NT_STATUS_OK:
+			break;
+		case NtStatus.NT_STATUS_ACCESS_DENIED:
+		case NtStatus.NT_STATUS_WRONG_PASSWORD:
+		case NtStatus.NT_STATUS_LOGON_FAILURE:
+		case NtStatus.NT_STATUS_ACCOUNT_RESTRICTION:
+		case NtStatus.NT_STATUS_INVALID_LOGON_HOURS:
+		case NtStatus.NT_STATUS_INVALID_WORKSTATION:
+		case NtStatus.NT_STATUS_PASSWORD_EXPIRED:
+		case NtStatus.NT_STATUS_ACCOUNT_DISABLED:
+		case NtStatus.NT_STATUS_ACCOUNT_LOCKED_OUT:
+		case NtStatus.NT_STATUS_TRUSTED_DOMAIN_FAILURE:
+			throw new SmbAuthException(resp.errorCode);
+		case NtStatus.NT_STATUS_PATH_NOT_COVERED:
+			if (req.auth == null) {
+				throw new SmbException(resp.errorCode, null);
+			}
+
+			DfsReferral[] drs = getDfsReferrals(req.auth, req.path, 1);
+			SmbFile.dfs.insert(req.path, drs[0]);
+			throw drs[0];
+		case 0x80000005: /* STATUS_BUFFER_OVERFLOW */
+			break; /* normal for DCERPC named pipes */
+		default:
+			throw new SmbException(resp.errorCode, null);
+		}
+		if (resp.verifyFailed) {
+			throw new SmbException("Signature verification failed.");
+		}
+	}
+
+	void send(ServerMessageBlock request, ServerMessageBlock response) throws SmbException {
+
+		connect(); /* must negotiate before we can test flags2, useUnicode, etc */
+
+		request.flags2 |= flags2;
+		request.useUnicode = useUnicode;
+		request.response = response; /* needed by sign */
+		if (request.digest == null)
+			request.digest = digest; /* for sign called in encode */
+
+		try {
+			if (response == null) {
+				doSend0(request);
+				return;
+			} else if (request instanceof SmbComTransaction) {
+				response.command = request.command;
+				SmbComTransaction req = (SmbComTransaction) request;
+				SmbComTransactionResponse resp = (SmbComTransactionResponse) response;
+
+				req.maxBufferSize = snd_buf_size;
+				resp.reset();
+
+				try {
+					BufferCache.getBuffers(req, resp);
+
+					/* 
+					 * First request w/ interim response
+					 */
+
+					req.nextElement();
+					if (req.hasMoreElements()) {
+						SmbComBlankResponse interim = new SmbComBlankResponse();
+						super.sendrecv(req, interim, RESPONSE_TIMEOUT);
+						if (interim.errorCode != 0) {
+							checkStatus(req, interim);
+						}
+						req.nextElement();
+					} else {
+						makeKey(req);
+					}
+
+					synchronized (response_map) {
+						response.received = false;
+						resp.isReceived = false;
+						try {
+							response_map.put(req, resp);
+
+							/* 
+							 * Send multiple fragments
+							 */
+
+							do {
+								doSend0(req);
+							} while (req.hasMoreElements() && req.nextElement() != null);
+
+							/* 
+							 * Receive multiple fragments
+							 */
+
+							long timeout = RESPONSE_TIMEOUT;
+							resp.expiration = System.currentTimeMillis() + timeout;
+							while (resp.hasMoreElements()) {
+								response_map.wait(timeout + 50);
+								timeout = resp.expiration - System.currentTimeMillis();
+								if (timeout <= 0) {
+									throw new TransportException(this + " timedout waiting for response to " + req);
+								}
+							}
+							if (response.errorCode != 0) {
+								checkStatus(req, resp);
+							}
+						} catch (InterruptedException ie) {
+							throw new TransportException(ie);
+						} finally {
+							response_map.remove(req);
+						}
+					}
+				} finally {
+					BufferCache.releaseBuffer(req.txn_buf);
+					BufferCache.releaseBuffer(resp.txn_buf);
+				}
+
+			} else {
+				response.command = request.command;
+				super.sendrecv(request, response, RESPONSE_TIMEOUT);
+			}
+		} catch (SmbException se) {
+			throw se;
+		} catch (InterruptedException ie) {
+			throw new SmbException(ie.getMessage(), ie);
+		} catch (IOException ioe) {
+			throw new SmbException(ioe.getMessage(), ioe);
+		}
+
+		checkStatus(request, response);
+	}
+
+	public String toString() {
+		return super.toString() + "[" + address + ":" + port + "]";
+	}
+
+	/* DFS */
+
+	/* Split DFS path like \fs1.example.com\root5\link2\foo\bar.txt into at
+	 * most 3 components (not including the first index which is always empty):
+	 * result[0] = ""
+	 * result[1] = "fs1.example.com"
+	 * result[2] = "root5"
+	 * result[3] = "link2\foo\bar.txt"
+	 */
+	void dfsPathSplit(String path, String[] result) {
+		int ri = 0, rlast = result.length - 1;
+		int i = 0, b = 0, len = path.length();
+
+		do {
+			if (ri == rlast) {
+				result[rlast] = path.substring(b);
+				return;
+			}
+			if (i == len || path.charAt(i) == '\\') {
+				result[ri++] = path.substring(b, i);
+				b = i + 1;
+			}
+		} while (i++ < len);
+
+		while (ri < result.length) {
+			result[ri++] = "";
+		}
+	}
+
+	DfsReferral[] getDfsReferrals(NtlmPasswordAuthentication auth, String path, int rn) throws SmbException {
+		SmbTree ipc = getSmbSession(auth).getSmbTree("IPC$", null);
+		Trans2GetDfsReferralResponse resp = new Trans2GetDfsReferralResponse();
+		ipc.send(new Trans2GetDfsReferral(path), resp);
+
+		if (rn == 0 || resp.numReferrals < rn) {
+			rn = resp.numReferrals;
+		}
+
+		DfsReferral[] drs = new DfsReferral[rn];
+		String[] arr = new String[4];
+		long expiration = System.currentTimeMillis() + Dfs.TTL * 1000;
+
+		for (int di = 0; di < drs.length; di++) {
+			DfsReferral dr = new DfsReferral();
+			/* NTLM HTTP Authentication must be re-negotiated
+			 * with challenge from 'server' to access DFS vol. */
+			dr.resolveHashes = auth.hashesExternal;
+			dr.ttl = resp.referrals[di].ttl;
+			dr.expiration = expiration;
+			if (path.equals("")) {
+				dr.server = resp.referrals[di].path.substring(1).toLowerCase();
+			} else {
+				dfsPathSplit(resp.referrals[di].node, arr);
+				dr.server = arr[1];
+				dr.share = arr[2];
+				dr.path = arr[3];
+			}
+			dr.pathConsumed = resp.pathConsumed;
+			drs[di] = dr;
+		}
+
+		return drs;
+	}
+
+	FileEntry[] getDfsRoots(String domainName, NtlmPasswordAuthentication auth) throws IOException {
+		MsrpcDfsRootEnum rpc;
+		DcerpcHandle handle = null;
+
+		/* Procedure:
+		 * Lookup a DC in the target domain
+		 * Ask the DC for a referral for the domain (e.g. "\example.com")
+		 * Do NetrDfsEnumEx on the server returned in the referral to
+		 * get roots in target domain
+		 */
+
+		UniAddress dc = UniAddress.getByName(domainName);
+		SmbTransport trans = SmbTransport.getSmbTransport(dc, 0);
+		DfsReferral[] dr = trans.getDfsReferrals(auth, "\\" + domainName, 1);
+
+		handle = DcerpcHandle.getHandle("ncacn_np:" + UniAddress.getByName(dr[0].server).getHostAddress() + "[\\PIPE\\netdfs]", auth);
+		try {
+			rpc = new MsrpcDfsRootEnum(domainName);
+			handle.sendrecv(rpc);
+			if (rpc.retval != 0)
+				throw new SmbException(rpc.retval, true);
+			return rpc.getEntries();
+		} finally {
+			try {
+				handle.close();
+			} catch (IOException ioe) {
+				if (log.level >= 4)
+					ioe.printStackTrace(log);
+			}
+		}
+	}
 }
-

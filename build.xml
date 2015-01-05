@@ -39,15 +39,26 @@ dependencies: Checks that all class dependencies are met.
         http://java.sun.com/products/servlet/download.html
         </fail>
     </target>
+	
+	<target name="init">
+		<path id="project.class.path">
+			<fileset dir="lib">
+				<include name="**/*.jar"/>
+				<include name="**/*.zip"/>
+			</fileset>
+		</path>
+	</target>
 
     <target name="dependencies">
-        <available classname="javax.servlet.Servlet" property="hasServlet"/>
-        <antcall target="hasServlet"/>
-    </target>
+      <available classname="javax.servlet.Servlet" property="hasServlet"/>
+      <antcall target="hasServlet"/>
+   </target>
 
-    <target name="compile" depends="dependencies">
+
+    <target name="compile" depends="init">
         <mkdir dir="build"/>
-        <javac srcdir="src" destdir="build" debug="on">
+        <javac srcdir="src" destdir="build" debug="on" target="1.4" source="1.4">
+            <classpath refid="project.class.path"/>
 <!--
             <compilerarg line="-Xlint:deprecation -Xlint:unchecked"/>
 -->

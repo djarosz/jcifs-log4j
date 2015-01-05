@@ -3,7 +3,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>org.samba.jcifs</groupId>
 	<artifactId>jcifs</artifactId>
-	<version>1.2.25</version>
+	<version>1.2.25-patched3</version>
 	<build>
 		<sourceDirectory>src</sourceDirectory>
 		<resources>
@@ -30,6 +30,11 @@
 			<groupId>javax.servlet</groupId>
 			<artifactId>servlet-api</artifactId>
 			<version>2.3</version>
+		</dependency>
+		<dependency>
+			<groupId>log4j</groupId>
+			<artifactId>log4j</artifactId>
+			<version>1.2.17</version>
 		</dependency>
 	</dependencies>
 </project>

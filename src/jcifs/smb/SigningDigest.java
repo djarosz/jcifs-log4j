@@ -2,10 +2,9 @@ package jcifs.smb;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.io.IOException;
-import jcifs.Config;
-import jcifs.util.LogStream;
+
 import jcifs.util.Hexdump;
+import jcifs.util.LogStream;
 
 /**
  * To filter 0 len updates and for debugging
@@ -36,20 +35,20 @@ public class SigningDigest implements SmbConstants {
             case 1:
             case 2:
                 macSigningKey = new byte[40];
-                auth.getUserSessionKey(transport.server.encryptionKey, macSigningKey, 0);
-                System.arraycopy(auth.getUnicodeHash(transport.server.encryptionKey),
+                auth.getUserSessionKey(transport.server.getEncryptionKey(), macSigningKey, 0);
+				System.arraycopy(auth.getUnicodeHash(transport.server.getEncryptionKey()),
                             0, macSigningKey, 16, 24);
                 break;
             case 3:
             case 4:
             case 5:
                 macSigningKey = new byte[16];
-                auth.getUserSessionKey(transport.server.encryptionKey, macSigningKey, 0);
+                auth.getUserSessionKey(transport.server.getEncryptionKey(), macSigningKey, 0);
                 break;
             default:
                 macSigningKey = new byte[40];
-                auth.getUserSessionKey(transport.server.encryptionKey, macSigningKey, 0);
-                System.arraycopy(auth.getUnicodeHash(transport.server.encryptionKey),
+                auth.getUserSessionKey(transport.server.getEncryptionKey(), macSigningKey, 0);
+				System.arraycopy(auth.getUnicodeHash(transport.server.getEncryptionKey()),
                             0, macSigningKey, 16, 24);
                 break;
             }

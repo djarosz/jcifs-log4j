@@ -19,6 +19,7 @@
 package jcifs.smb;
 
 import java.util.Arrays;
+
 import jcifs.Config;
 
 class SmbComSessionSetupAndX extends AndXServerMessageBlock {
@@ -42,7 +43,7 @@ class SmbComSessionSetupAndX extends AndXServerMessageBlock {
         this.session = session;
         this.auth = session.auth;
         if( auth.hashesExternal &&
-                    Arrays.equals(auth.challenge, session.transport.server.encryptionKey) == false ) {
+                    Arrays.equals(auth.challenge, session.transport.server.getEncryptionKey()) == false) {
             throw new SmbAuthException( SmbException.NT_STATUS_ACCESS_VIOLATION );
         }
     }
@@ -53,12 +54,12 @@ class SmbComSessionSetupAndX extends AndXServerMessageBlock {
     int writeParameterWordsWireFormat( byte[] dst, int dstIndex ) {
         int start = dstIndex;
 
-        if( session.transport.server.security == SECURITY_USER &&
+        if (session.transport.server.getSecurity() == SECURITY_USER &&
                         ( auth.hashesExternal || auth.password.length() > 0 )) {
-            if( session.transport.server.encryptedPasswords ) {
-                accountPassword = auth.getAnsiHash( session.transport.server.encryptionKey );
+            if (session.transport.server.isEncryptedPasswords()) {
+				accountPassword = auth.getAnsiHash(session.transport.server.getEncryptionKey());
                 passwordLength = accountPassword.length;
-                unicodePassword = auth.getUnicodeHash( session.transport.server.encryptionKey );
+                unicodePassword = auth.getUnicodeHash(session.transport.server.getEncryptionKey());
                 unicodePasswordLength = unicodePassword.length;
                 // prohibit HTTP auth attempts for the null session
                 if (unicodePasswordLength == 0 && passwordLength == 0) {
@@ -115,11 +116,11 @@ class SmbComSessionSetupAndX extends AndXServerMessageBlock {
         accountName = useUnicode ? auth.username : auth.username.toUpperCase();
         primaryDomain = auth.domain.toUpperCase();
 
-        if( session.transport.server.security == SECURITY_USER &&
+        if (session.transport.server.getSecurity() == SECURITY_USER &&
                         ( auth.hashesExternal || auth.password.length() > 0 )) {
             System.arraycopy( accountPassword, 0, dst, dstIndex, passwordLength );
             dstIndex += passwordLength;
-            if (session.transport.server.encryptedPasswords == false && useUnicode) {
+            if (session.transport.server.isEncryptedPasswords() == false && useUnicode) {
                 /* Align Unicode plain text password manually
                  */
                 if ((( dstIndex - headerStart ) % 2 ) != 0 ) {

@@ -20,10 +20,8 @@ package jcifs.netbios;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.net.SocketException;
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.util.HashMap;
+
 import jcifs.Config;
 import jcifs.util.Hexdump;
 
@@ -167,6 +165,7 @@ public final class NbtAddress {
     }
 
     static NbtAddress localhost;
+    public static boolean localhostSet = true;
 
     static {
         InetAddress localInetAddress;
@@ -206,10 +205,11 @@ public final class NbtAddress {
         localHostname = Config.getProperty( "jcifs.netbios.hostname", null );
         if( localHostname == null || localHostname.length() == 0 ) {
             byte[] addr = localInetAddress.getAddress();
+            localhostSet = false;
             localHostname = "JCIFS" +
                     ( addr[2] & 0xFF ) + "_" +
                     ( addr[3] & 0xFF ) + "_" +
-                    Hexdump.toHexString( (int)( Math.random() * (double)0xFF ), 2 );
+                    Hexdump.toHexString( (int)( Math.random() * 0xFF ), 2 );
         }
 
         /* Create an NbtAddress for the local interface with
@@ -419,7 +419,7 @@ public final class NbtAddress {
             return getLocalHost();
         }
         if( !Character.isDigit( host.charAt(0) )) {
-            return (NbtAddress)doNameQuery( new Name( host, type, scope ), svr );
+            return doNameQuery( new Name( host, type, scope ), svr );
         } else {
             int IP = 0x00;
             int hitDots = 0;
@@ -428,12 +428,12 @@ public final class NbtAddress {
             for( int i = 0; i < data.length; i++ ) {
                 char c = data[i];
                 if( c < 48 || c > 57 ) {
-                    return (NbtAddress)doNameQuery( new Name( host, type, scope ), svr );
+                    return doNameQuery( new Name( host, type, scope ), svr );
                 }
                 int b = 0x00;
                 while( c != '.' ) {
                     if( c < 48 || c > 57 ) {
-                        return (NbtAddress)doNameQuery( new Name( host, type, scope ), svr );
+                        return doNameQuery( new Name( host, type, scope ), svr );
                     }
                     b = b * 10 + c - '0';
 
@@ -443,13 +443,13 @@ public final class NbtAddress {
                     c = data[i];
                 }
                 if( b > 0xFF ) {
-                    return (NbtAddress)doNameQuery( new Name( host, type, scope ), svr );
+                    return doNameQuery( new Name( host, type, scope ), svr );
                 }
                 IP = ( IP << 8 ) + b;
                 hitDots++;
             }
             if( hitDots != 4 || host.endsWith( "." )) {
-                return (NbtAddress)doNameQuery( new Name( host, type, scope ), svr );
+                return doNameQuery( new Name( host, type, scope ), svr );
             }
             return new NbtAddress( UNKNOWN_NAME, IP, false, B_NODE );
         }

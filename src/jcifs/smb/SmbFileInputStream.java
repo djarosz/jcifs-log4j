@@ -18,12 +18,11 @@
 
 package jcifs.smb;
 
-import java.net.URL;
-import java.net.UnknownHostException;
-import java.net.MalformedURLException;
-import java.io.InputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InterruptedIOException;
+import java.net.MalformedURLException;
+import java.net.UnknownHostException;
 
 import jcifs.util.transport.TransportException;
 
@@ -34,7 +33,9 @@ import jcifs.util.transport.TransportException;
 public class SmbFileInputStream extends InputStream {
 
     private long fp;
-    private int readSize, openFlags, access;
+    private final int readSize;
+	private int openFlags;
+	final int access;
     private byte[] tmp = new byte[1];
 
     SmbFile file;
@@ -76,7 +77,7 @@ public class SmbFileInputStream extends InputStream {
             file.connect0();
         }
         readSize = Math.min( file.tree.session.transport.rcv_buf_size - 70,
-                            file.tree.session.transport.server.maxBufferSize - 70 );
+                            file.tree.session.transport.server.getMaxBufferSize() - 70);
     }
 
     protected IOException seToIoe(SmbException se) {

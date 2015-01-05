@@ -18,25 +18,26 @@
 
 package jcifs.smb;
 
-import java.net.URLConnection;
-import java.net.URL;
-import java.net.MalformedURLException;
-import java.net.UnknownHostException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.net.UnknownHostException;
+import java.security.Principal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.security.Principal;
-import jcifs.Config;
-import jcifs.util.LogStream;
-import jcifs.UniAddress;
-import jcifs.netbios.NbtAddress;
-import jcifs.dcerpc.*;
-import jcifs.dcerpc.msrpc.*;
 
-import java.util.Date;
+import jcifs.Config;
+import jcifs.UniAddress;
+import jcifs.dcerpc.DcerpcHandle;
+import jcifs.dcerpc.msrpc.MsrpcDfsRootEnum;
+import jcifs.dcerpc.msrpc.MsrpcShareEnum;
+import jcifs.dcerpc.msrpc.MsrpcShareGetInfo;
+import jcifs.netbios.NbtAddress;
+import jcifs.util.LogStream;
 
 /**
  * This class represents a resource on an SMB network. Mainly these
@@ -1308,7 +1309,7 @@ if (this instanceof SmbNamedPipe) {
 
             SmbComQueryInformationResponse response =
                     new SmbComQueryInformationResponse(
-                    tree.session.transport.server.serverTimeZone * 1000 * 60L );
+                    tree.session.transport.server.getServerTimeZone() * 1000 * 60L);
             send( new SmbComQueryInformation( path ), response );
             return response;
         }
@@ -1849,7 +1850,7 @@ if (this instanceof SmbNamedPipe) {
 
         if (listType == 0) {
             connect0();
-            req = new NetServerEnum2(tree.session.transport.server.oemDomainName,
+            req = new NetServerEnum2(tree.session.transport.server.getOemDomainName(),
                         NetServerEnum2.SV_TYPE_DOMAIN_ENUM );
             resp = new NetServerEnum2Response();
         } else if (listType == TYPE_WORKGROUP) {

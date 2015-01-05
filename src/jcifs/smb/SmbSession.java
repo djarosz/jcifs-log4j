@@ -18,10 +18,11 @@
 
 package jcifs.smb;
 
-import java.util.Vector;
-import java.util.Enumeration;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Enumeration;
+import java.util.Vector;
+
 import jcifs.Config;
 import jcifs.UniAddress;
 import jcifs.netbios.NbtAddress;
@@ -52,295 +53,286 @@ changed without changing init parameters or reinitializing the webapp.
 
 public final class SmbSession {
 
-    private static final String LOGON_SHARE =
-                Config.getProperty( "jcifs.smb.client.logonShare", null );
-    private static final int LOOKUP_RESP_LIMIT =
-                Config.getInt( "jcifs.netbios.lookupRespLimit", 3 );
-    private static final String DOMAIN =
-                Config.getProperty("jcifs.smb.client.domain", null);
-    private static final String USERNAME =
-                Config.getProperty("jcifs.smb.client.username", null);
-    private static final int CACHE_POLICY =
-                Config.getInt( "jcifs.netbios.cachePolicy", 60 * 10 ) * 60; /* 10 hours */
+	private static final String LOGON_SHARE = Config.getProperty("jcifs.smb.client.logonShare", null);
+	private static final int LOOKUP_RESP_LIMIT = Config.getInt("jcifs.netbios.lookupRespLimit", 3);
+	private static final String DOMAIN = Config.getProperty("jcifs.smb.client.domain", null);
+	private static final String USERNAME = Config.getProperty("jcifs.smb.client.username", null);
+	private static final int CACHE_POLICY = Config.getInt("jcifs.netbios.cachePolicy", 60 * 10) * 60; /* 10 hours */
 
-    static NbtAddress[] dc_list = null;
-    static long dc_list_expiration;
-    static int dc_list_counter;
+	static NbtAddress[] dc_list = null;
+	static long dc_list_expiration;
+	static int dc_list_counter;
 
-    private static NtlmChallenge interrogate( NbtAddress addr ) throws SmbException {
-        UniAddress dc = new UniAddress( addr );
-        SmbTransport trans = SmbTransport.getSmbTransport( dc, 0 );
-        if (USERNAME == null) {
-            trans.connect();
-            if (SmbTransport.log.level >= 3)
-                SmbTransport.log.println(
-                    "Default credentials (jcifs.smb.client.username/password)" +
-                    " not specified. SMB signing may not work propertly." +
-                    "  Skipping DC interrogation." );
-        } else {
-            SmbSession ssn = trans.getSmbSession( NtlmPasswordAuthentication.DEFAULT );
-            ssn.getSmbTree( LOGON_SHARE, null ).treeConnect( null, null );
-        }
-        return new NtlmChallenge( trans.server.encryptionKey, dc );
-    }
-    public static NtlmChallenge getChallengeForDomain()
-                throws SmbException, UnknownHostException {
-        if( DOMAIN == null ) {
-            throw new SmbException( "A domain was not specified" );
-        }
-        synchronized (DOMAIN) {
-            long now = System.currentTimeMillis();
-int retry = 1;
+	private static NtlmChallenge interrogate(NbtAddress addr) throws SmbException {
+		UniAddress dc = new UniAddress(addr);
+		SmbTransport trans = SmbTransport.getSmbTransport(dc, 0);
+		if (USERNAME == null) {
+			trans.connect();
+			if (SmbTransport.log.level >= 3)
+				SmbTransport.log.println("Default credentials (jcifs.smb.client.username/password)" + " not specified. SMB signing may not work propertly."
+						+ "  Skipping DC interrogation.");
+		} else {
+			SmbSession ssn = trans.getSmbSession(NtlmPasswordAuthentication.DEFAULT);
+			ssn.getSmbTree(LOGON_SHARE, null).treeConnect(null, null);
+		}
+		return new NtlmChallenge(trans.server.getEncryptionKey(), dc);
+	}
 
-do {
-            if (dc_list_expiration < now) {
-                NbtAddress[] list = NbtAddress.getAllByName( DOMAIN, 0x1C, null, null );
-                dc_list_expiration = now + CACHE_POLICY * 1000L;
-                if (list != null && list.length > 0) {
-                    dc_list = list;
-                } else { /* keep using the old list */
-                    dc_list_expiration = now + 1000 * 60 * 15; /* 15 min */
-                    if (SmbTransport.log.level >= 2) {
-                        SmbTransport.log.println( "Failed to retrieve DC list from WINS" );
-                    }
-                }
-            }
+	public static NtlmChallenge getChallengeForDomain() throws SmbException, UnknownHostException {
+		if (DOMAIN == null) {
+			throw new SmbException("A domain was not specified");
+		}
+		synchronized (DOMAIN) {
+			long now = System.currentTimeMillis();
+			int retry = 1;
 
-            int max = Math.min( dc_list.length, LOOKUP_RESP_LIMIT );
-            for (int j = 0; j < max; j++) {
-                int i = dc_list_counter++ % max;
-                if (dc_list[i] != null) {
-                    try {
-                        return interrogate( dc_list[i] );
-                    } catch (SmbException se) {
-                        if (SmbTransport.log.level >= 2) {
-                            SmbTransport.log.println( "Failed validate DC: " + dc_list[i] );
-                            if (SmbTransport.log.level > 2)
-                                se.printStackTrace( SmbTransport.log );
-                        }
-                    }
-                    dc_list[i] = null;
-                }
-            }
+			do {
+				if (dc_list_expiration < now) {
+					NbtAddress[] list = NbtAddress.getAllByName(DOMAIN, 0x1C, null, null);
+					dc_list_expiration = now + CACHE_POLICY * 1000L;
+					if (list != null && list.length > 0) {
+						dc_list = list;
+					} else { /* keep using the old list */
+						dc_list_expiration = now + 1000 * 60 * 15; /* 15 min */
+						if (SmbTransport.log.level >= 2) {
+							SmbTransport.log.println("Failed to retrieve DC list from WINS");
+						}
+					}
+				}
 
-/* No DCs found, for retieval of list by expiring it and retry.
- */
-            dc_list_expiration = 0;
-} while (retry-- > 0);
+				int max = Math.min(dc_list.length, LOOKUP_RESP_LIMIT);
+				for (int j = 0; j < max; j++) {
+					int i = dc_list_counter++ % max;
+					if (dc_list[i] != null) {
+						try {
+							return interrogate(dc_list[i]);
+						} catch (SmbException se) {
+							if (SmbTransport.log.level >= 2) {
+								SmbTransport.log.println("Failed validate DC: " + dc_list[i]);
+								if (SmbTransport.log.level > 2)
+									se.printStackTrace(SmbTransport.log);
+							}
+						}
+						dc_list[i] = null;
+					}
+				}
 
-            dc_list_expiration = now + 1000 * 60 * 15; /* 15 min */
-        }
+				/* No DCs found, for retieval of list by expiring it and retry.
+				 */
+				dc_list_expiration = 0;
+			} while (retry-- > 0);
 
-        throw new UnknownHostException(
-                "Failed to negotiate with a suitable domain controller for " + DOMAIN );
-    }
+			dc_list_expiration = now + 1000 * 60 * 15; /* 15 min */
+		}
 
-    public static byte[] getChallenge( UniAddress dc )
-                throws SmbException, UnknownHostException {
-        return getChallenge(dc, 0);
-    }
+		throw new UnknownHostException("Failed to negotiate with a suitable domain controller for " + DOMAIN);
+	}
 
-    public static byte[] getChallenge( UniAddress dc, int port )
-                throws SmbException, UnknownHostException {
-        SmbTransport trans = SmbTransport.getSmbTransport( dc, port );
-        trans.connect();
-        return trans.server.encryptionKey;
-    }
-/**
- * Authenticate arbitrary credentials represented by the
- * <tt>NtlmPasswordAuthentication</tt> object against the domain controller
- * specified by the <tt>UniAddress</tt> parameter. If the credentials are
- * not accepted, an <tt>SmbAuthException</tt> will be thrown. If an error
- * occurs an <tt>SmbException</tt> will be thrown. If the credentials are
- * valid, the method will return without throwing an exception. See the
- * last <a href="../../../faq.html">FAQ</a> question.
- *
- * See also the <tt>jcifs.smb.client.logonShare</tt> property.
- */
-    public static void logon( UniAddress dc,
-                        NtlmPasswordAuthentication auth ) throws SmbException {
-        logon(dc, 0, auth);
-    }
+	public static byte[] getChallenge(UniAddress dc) throws SmbException, UnknownHostException {
+		return getChallenge(dc, 0);
+	}
 
-    public static void logon( UniAddress dc, int port,
-                        NtlmPasswordAuthentication auth ) throws SmbException {
-        SmbTree tree = SmbTransport.getSmbTransport( dc, port ).getSmbSession( auth ).getSmbTree( LOGON_SHARE, null );
-        if( LOGON_SHARE == null ) {
-            tree.treeConnect( null, null );
-        } else {
-            Trans2FindFirst2 req = new Trans2FindFirst2( "\\", "*", SmbFile.ATTR_DIRECTORY );
-            Trans2FindFirst2Response resp = new Trans2FindFirst2Response();
-            tree.send( req, resp );
-        }
-    }
+	public static byte[] getChallenge(UniAddress dc, int port) throws SmbException, UnknownHostException {
+		SmbTransport trans = SmbTransport.getSmbTransport(dc, port);
+		trans.connect();
+		return trans.server.getEncryptionKey();
+	}
 
-    private int uid;
-    Vector trees;
-    private boolean sessionSetup;
-    // Transport parameters allows trans to be removed from CONNECTIONS
-    private UniAddress address;
-    private int port, localPort;
-    private InetAddress localAddr;
+	/**
+	 * Authenticate arbitrary credentials represented by the
+	 * <tt>NtlmPasswordAuthentication</tt> object against the domain controller
+	 * specified by the <tt>UniAddress</tt> parameter. If the credentials are
+	 * not accepted, an <tt>SmbAuthException</tt> will be thrown. If an error
+	 * occurs an <tt>SmbException</tt> will be thrown. If the credentials are
+	 * valid, the method will return without throwing an exception. See the
+	 * last <a href="../../../faq.html">FAQ</a> question.
+	 *
+	 * See also the <tt>jcifs.smb.client.logonShare</tt> property.
+	 */
+	public static void logon(UniAddress dc, NtlmPasswordAuthentication auth) throws SmbException {
+		logon(dc, 0, auth);
+	}
 
-    SmbTransport transport = null;
-    NtlmPasswordAuthentication auth;
-    long expiration;
+	public static void logon(UniAddress dc, int port, NtlmPasswordAuthentication auth) throws SmbException {
+		SmbSession session = SmbTransport.getSmbTransport(dc, port).getSmbSession(auth);
+		session.logon();
+	}
 
-    SmbSession( UniAddress address, int port,
-                InetAddress localAddr, int localPort,
-                NtlmPasswordAuthentication auth ) {
-        this.address = address;
-        this.port = port;
-        this.localAddr = localAddr;
-        this.localPort = localPort;
-        this.auth = auth;
-        trees = new Vector();
-    }
+	private int uid;
+	Vector trees;
+	private boolean sessionSetup;
+	// Transport parameters allows trans to be removed from CONNECTIONS
+	private final UniAddress address;
+	private final int port, localPort;
+	private final InetAddress localAddr;
 
-    synchronized SmbTree getSmbTree( String share, String service ) {
-        SmbTree t;
+	SmbTransport transport = null;
+	NtlmPasswordAuthentication auth;
+	long expiration;
 
-        if( share == null ) {
-            share = "IPC$";
-        }
-        for( Enumeration e = trees.elements(); e.hasMoreElements(); ) {
-            t = (SmbTree)e.nextElement();
-            if( t.matches( share, service )) {
-                return t;
-            }
-        }
-        t = new SmbTree( this, share, service );
-        trees.addElement( t );
-        return t;
-    }
-    boolean matches( NtlmPasswordAuthentication auth ) {
-        return this.auth == auth || this.auth.equals( auth );
-    }
-    synchronized SmbTransport transport() {
-        if( transport == null ) {
-            transport = SmbTransport.getSmbTransport( address, port, localAddr, localPort );
-        }
-        return transport;
-    }
-    void send( ServerMessageBlock request,
-                            ServerMessageBlock response ) throws SmbException {
-        if( response != null ) {
-            response.received = false;
-        }
+	SmbSession(UniAddress address, int port, InetAddress localAddr, int localPort, NtlmPasswordAuthentication auth) {
+		this.address = address;
+		this.port = port;
+		this.localAddr = localAddr;
+		this.localPort = localPort;
+		this.auth = auth;
+		trees = new Vector();
+	}
 
-        synchronized(transport.setupDiscoLock) {
-            expiration = System.currentTimeMillis() + SmbTransport.SO_TIMEOUT;
-            sessionSetup( request, response );
-            if( response != null && response.received ) {
-                return;
-            }
-            request.uid = uid;
-            request.auth = auth;
-            try {
-                transport.send( request, response );
-            } catch (SmbException se) {
-                if (request instanceof SmbComTreeConnectAndX) {
-                    logoff(true);
-                }
-                request.digest = null;
-                throw se;
-            }
-        }
-    }
-    void sessionSetup( ServerMessageBlock andx,
-                            ServerMessageBlock andxResponse ) throws SmbException {
-        SmbException ex = null;
+	SmbTree getSmbTree(String share, String service) {
+		SmbTree t;
 
-synchronized( transport() ) {
-        if( sessionSetup ) {
-            return;
-        }
+		if (share == null) {
+			share = "IPC$";
+		}
+		synchronized (trees) {
+			for (Enumeration e = trees.elements(); e.hasMoreElements();) {
+				t = (SmbTree) e.nextElement();
+				if (t.matches(share, service)) {
+					return t;
+				}
+			}
+			t = new SmbTree(this, share, service);
+			trees.addElement(t);
+		}
+		return t;
+	}
 
-        transport.connect();
+	boolean matches(NtlmPasswordAuthentication auth) {
+		return this.auth == auth || this.auth.equals(auth);
+	}
 
-        /*
-         * Session Setup And X Request / Response
-         */
+	synchronized SmbTransport transport() {
+		if (transport == null) {
+			transport = SmbTransport.getSmbTransport(address, port, localAddr, localPort);
+		}
+		return transport;
+	}
 
-        if( transport.log.level >= 4 )
-            transport.log.println( "sessionSetup: accountName=" + auth.username + ",primaryDomain=" + auth.domain );
+	void send(ServerMessageBlock request, ServerMessageBlock response) throws SmbException {
+		if (response != null) {
+			response.received = false;
+		}
+		synchronized (transport) {
+			expiration = System.currentTimeMillis() + SmbTransport.SO_TIMEOUT;
+			sessionSetup(request, response); // synchronized(transport)
+			if (response != null && response.received) {
+				return;
+			}
+			request.uid = uid;
+			request.auth = auth;
+			try {
+				transport.send(request, response); // synchronized(transport)
+			} catch (SmbException se) {
+				if (request instanceof SmbComTreeConnectAndX) {
+					logoff(true);
+				}
+				request.digest = null;
+				throw se;
+			}
+		}
+	}
 
-        SmbComSessionSetupAndX request = new SmbComSessionSetupAndX( this, andx );
-        SmbComSessionSetupAndXResponse response = new SmbComSessionSetupAndXResponse( andxResponse );
+	void sessionSetup(ServerMessageBlock andx, ServerMessageBlock andxResponse) throws SmbException {
+		SmbException ex = null;
 
-        /* Create SMB signature digest if necessary
-         * Only the first SMB_COM_SESSION_SETUP_ANX with non-null or
-         * blank password initializes signing.
-         */
-        if (transport.isSignatureSetupRequired( auth )) {
-            if( auth.hashesExternal && NtlmPasswordAuthentication.DEFAULT_PASSWORD != NtlmPasswordAuthentication.BLANK ) {
-                /* preauthentication
-                 */
-                transport.getSmbSession( NtlmPasswordAuthentication.DEFAULT ).getSmbTree( LOGON_SHARE, null ).treeConnect( null, null );
-            } else {
-                request.digest = new SigningDigest( transport, auth );
-            }
-        }
+		synchronized (transport()) {
+			if (sessionSetup) {
+				return;
+			}
 
-        request.auth = auth;
+			transport.connect();
 
-        try {
-            transport.send( request, response );
-        } catch (SmbAuthException sae) {
-            throw sae;
-        } catch (SmbException se) {
-            ex = se;
-        }
+			/*
+			 * Session Setup And X Request / Response
+			 */
 
-        if( response.isLoggedInAsGuest &&
-                    "GUEST".equalsIgnoreCase( auth.username ) == false) {
-            throw new SmbAuthException( NtStatus.NT_STATUS_LOGON_FAILURE );
-        }
+			if (transport.log.level >= 4)
+				transport.log.println("sessionSetup: accountName=" + auth.username + ",primaryDomain=" + auth.domain);
 
-        uid = response.uid;
-        sessionSetup = true;
+			SmbComSessionSetupAndX request = new SmbComSessionSetupAndX(this, andx);
+			SmbComSessionSetupAndXResponse response = new SmbComSessionSetupAndXResponse(andxResponse);
 
-        if( request.digest != null ) {
-            /* success - install the signing digest */
-            transport.digest = request.digest;
-        }
+			/* Create SMB signature digest if necessary
+			 * Only the first SMB_COM_SESSION_SETUP_ANX with non-null or
+			 * blank password initializes signing.
+			 */
+			if (transport.isSignatureSetupRequired(auth)) {
+				if (auth.hashesExternal && NtlmPasswordAuthentication.DEFAULT_PASSWORD != NtlmPasswordAuthentication.BLANK) {
+					/* preauthentication
+					 */
+					transport.getSmbSession(NtlmPasswordAuthentication.DEFAULT).getSmbTree(LOGON_SHARE, null).treeConnect(null, null);
+				} else {
+					request.digest = new SigningDigest(transport, auth);
+				}
+			}
 
-        if (ex != null)
-            throw ex;
-}
-    }
-    void logoff( boolean inError ) {
-synchronized( transport() ) {
-        if( sessionSetup == false ) {
-            return;
-        }
+			request.auth = auth;
 
-        for( Enumeration e = trees.elements(); e.hasMoreElements(); ) {
-            SmbTree t = (SmbTree)e.nextElement();
-            t.treeDisconnect( inError );
-        }
+			try {
+				transport.send(request, response);
+			} catch (SmbAuthException sae) {
+				throw sae;
+			} catch (SmbException se) {
+				ex = se;
+			}
 
-        if( !inError && transport.server.security != ServerMessageBlock.SECURITY_SHARE ) {
+			if (response.isLoggedInAsGuest && "GUEST".equalsIgnoreCase(auth.username) == false) {
+				throw new SmbAuthException(NtStatus.NT_STATUS_LOGON_FAILURE);
+			}
 
-            /*
-             * Logoff And X Request / Response
-             */
+			uid = response.uid;
+			sessionSetup = true;
 
-            SmbComLogoffAndX request = new SmbComLogoffAndX( null );
-            request.uid = uid;
-            try {
-                transport.send( request, null );
-            } catch( SmbException se ) {
-            }
-        }
+			if (request.digest != null) {
+				/* success - install the signing digest */
+				transport.digest = request.digest;
+			}
 
-        sessionSetup = false;
-}
-    }
-    public String toString() {
-        return "SmbSession[accountName=" + auth.username +
-                ",primaryDomain=" + auth.domain +
-                ",uid=" + uid +
-                ",sessionSetup=" + sessionSetup + "]";
-    }
+			if (ex != null)
+				throw ex;
+		}
+	}
+
+	void logon() throws SmbException {
+		SmbTree tree = getSmbTree(LOGON_SHARE, null);
+		if (LOGON_SHARE == null) {
+			tree.treeConnect(null, null);
+		} else {
+			Trans2FindFirst2 req = new Trans2FindFirst2("\\", "*", SmbFile.ATTR_DIRECTORY);
+			Trans2FindFirst2Response resp = new Trans2FindFirst2Response();
+			tree.send(req, resp);
+		}
+	}
+	
+	void logoff(boolean inError) {
+		if (sessionSetup == false) {
+			return;
+		}
+		synchronized (trees) {
+			for (Enumeration e = trees.elements(); e.hasMoreElements();) {
+				SmbTree t = (SmbTree) e.nextElement();
+				t.treeDisconnect(inError);				
+			}
+		}
+
+		if (!inError && transport.server.getSecurity() != ServerMessageBlock.SECURITY_SHARE) {
+			/*
+			 * Logoff And X Request / Response
+			 */
+
+			SmbComLogoffAndX request = new SmbComLogoffAndX(null);
+			request.uid = uid;
+			try {
+				transport.send(request, null);
+			} catch (SmbException se) {
+			}
+		}
+
+		sessionSetup = false;
+	}
+
+	public String toString() {
+		return "SmbSession[accountName=" + auth.username + ",primaryDomain=" + auth.domain + ",uid=" + uid + ",sessionSetup=" + sessionSetup + "]";
+	}
 }

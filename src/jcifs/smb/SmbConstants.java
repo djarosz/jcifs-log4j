@@ -1,8 +1,8 @@
 package jcifs.smb;
 
-import java.util.LinkedList;
 import java.net.InetAddress;
 import java.util.TimeZone;
+
 import jcifs.Config;
 
 interface SmbConstants {
@@ -143,8 +143,6 @@ interface SmbConstants {
     static final boolean TCP_NODELAY = Config.getBoolean( "jcifs.smb.client.tcpNoDelay", false );
     static final int RESPONSE_TIMEOUT =
                 Config.getInt( "jcifs.smb.client.responseTimeout", DEFAULT_RESPONSE_TIMEOUT );
-
-    static final LinkedList CONNECTIONS = new LinkedList();
 
     static final int SSN_LIMIT =
             Config.getInt( "jcifs.smb.client.ssnLimit", DEFAULT_SSN_LIMIT );
