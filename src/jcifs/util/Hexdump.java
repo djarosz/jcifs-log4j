@@ -30,34 +30,34 @@ public class Hexdump {
     private static final int NL_LENGTH = NL.length();
 
     private static final char[] SPACE_CHARS = {
-        ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-        ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-        ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '
+            ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+            ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+            ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '
     };
 
-    public static final char[] HEX_DIGITS = { 
-        '0', '1', '2', '3', '4', '5',
-        '6', '7', '8', '9', 'A', 'B',
-        'C', 'D', 'E', 'F'
+    public static final char[] HEX_DIGITS = {
+            '0', '1', '2', '3', '4', '5',
+            '6', '7', '8', '9', 'A', 'B',
+            'C', 'D', 'E', 'F'
     };
 
-/** 
- * Generate "hexdump" output of the buffer at src like the following:
- *
- * <p><blockquote><pre>
- * 00000: 04 d2 29 00 00 01 00 00 00 00 00 01 20 45 47 46  |..)......... EGF|
- * 00010: 43 45 46 45 45 43 41 43 41 43 41 43 41 43 41 43  |CEFEECACACACACAC|
- * 00020: 41 43 41 43 41 43 41 43 41 43 41 41 44 00 00 20  |ACACACACACAAD.. |
- * 00030: 00 01 c0 0c 00 20 00 01 00 00 00 00 00 06 20 00  |..... ........ .|
- * 00040: ac 22 22 e1                                      |."".            |
- * </blockquote></pre>
- */
+    /**
+     * Generate "hexdump" output of the buffer at src like the following:
+     *
+     * <p><blockquote><pre>
+     * 00000: 04 d2 29 00 00 01 00 00 00 00 00 01 20 45 47 46  |..)......... EGF|
+     * 00010: 43 45 46 45 45 43 41 43 41 43 41 43 41 43 41 43  |CEFEECACACACACAC|
+     * 00020: 41 43 41 43 41 43 41 43 41 43 41 41 44 00 00 20  |ACACACACACAAD.. |
+     * 00030: 00 01 c0 0c 00 20 00 01 00 00 00 00 00 06 20 00  |..... ........ .|
+     * 00040: ac 22 22 e1                                      |."".            |
+     * </blockquote></pre>
+     */
 
     public static void hexdump( Logger logger, byte[] src, int srcIndex, int length ) {
-    	if (!logger.isDebugEnabled()) {
-    		return;
-    	}
-    	
+        if (!logger.isDebugEnabled()) {
+            return;
+        }
+
         if( length == 0 ) {
             return;
         }
@@ -85,7 +85,7 @@ public class Hexdump {
                 c[ci++] = ' ';
                 i = src[srcIndex + si] & 0xFF;
                 toHexChars( i, c, ci, 2 );
-                ci += 2; 
+                ci += 2;
                 if( i < 0 || Character.isISOControl( (char)i )) {
                     d[si % 16] = '.';
                 } else {
@@ -102,23 +102,23 @@ public class Hexdump {
             ci += NL_LENGTH;
         } while( si < length );
 
-        logger.debug( c );
+        logger.debug( String.valueOf(c) );
     }
 
-/** 
- * This is an alternative to the <code>java.lang.Integer.toHexString</cod>
- * method. It is an efficient relative that also will pad the left side so
- * that the result is <code>size</code> digits.
- */ 
+    /**
+     * This is an alternative to the <code>java.lang.Integer.toHexString</cod>
+     * method. It is an efficient relative that also will pad the left side so
+     * that the result is <code>size</code> digits.
+     */
     public static String toHexString( int val, int size ) {
         char[] c = new char[size];
         toHexChars( val, c, 0, size );
-        return new String( c );
+        return String.valueOf( c );
     }
     public static String toHexString( long val, int size ) {
         char[] c = new char[size];
         toHexChars( val, c, 0, size );
-        return new String( c );
+        return String.valueOf( c );
     }
     public static String toHexString( byte[] src, int srcIndex, int size ) {
         char[] c = new char[size];
@@ -130,14 +130,14 @@ public class Hexdump {
             }
             c[j++] = HEX_DIGITS[src[i] & 0x0F];
         }
-        return new String( c );
+        return String.valueOf(c);
     }
 
-/** 
- * This is the same as {@link jcifs.util.Hexdump#toHexString(int val, int
- * size)} but provides a more practical form when trying to avoid {@link
- * java.lang.String} concatenation and {@link java.lang.StringBuffer}.
- */ 
+    /**
+     * This is the same as {@link jcifs.util.Hexdump#toHexString(int val, int
+     * size)} but provides a more practical form when trying to avoid {@link
+     * java.lang.String} concatenation and {@link java.lang.StringBuffer}.
+     */
     public static void toHexChars( int val, char dst[], int dstIndex, int size ) {
         while( size > 0 ) {
             int i = dstIndex + size - 1;
