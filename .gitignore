@@ -6,4 +6,5 @@ target/
 build/
 *.iml
 .idea/
-
+pom.xml.releaseBackup
+release.properties
