@@ -164,6 +164,7 @@ public final class NbtAddress {
     }
 
     static NbtAddress localhost;
+    public static boolean localhostSet = true;
 
     static {
         InetAddress localInetAddress;
@@ -203,6 +204,7 @@ public final class NbtAddress {
         localHostname = Config.getProperty( "jcifs.netbios.hostname", null );
         if( localHostname == null || localHostname.length() == 0 ) {
             byte[] addr = localInetAddress.getAddress();
+            localhostSet = false;
             localHostname = "JCIFS" +
                     ( addr[2] & 0xFF ) + "_" +
                     ( addr[3] & 0xFF ) + "_" +
