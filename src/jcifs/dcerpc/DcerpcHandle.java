@@ -41,7 +41,7 @@ public abstract class DcerpcHandle implements DcerpcConstants {
      * proto:ts0.win.net[\pipe\srvsvc]
      *
      * If the server is absent it is set to "127.0.0.1"
-     */ 
+     */
     protected static DcerpcBinding parseBinding(String str) throws DcerpcException {
         int state, mark, si;
         char[] arr = str.toCharArray();
@@ -109,8 +109,8 @@ public abstract class DcerpcHandle implements DcerpcConstants {
     private static int call_id = 1;
 
     public static DcerpcHandle getHandle(String url,
-                NtlmPasswordAuthentication auth)
-                throws UnknownHostException, MalformedURLException, DcerpcException {
+            NtlmPasswordAuthentication auth)
+            throws UnknownHostException, MalformedURLException, DcerpcException {
         if (url.startsWith("ncacn_np:")) {
             return new DcerpcPipeHandle(url, auth);
         }
@@ -118,16 +118,16 @@ public abstract class DcerpcHandle implements DcerpcConstants {
     }
 
     public void bind() throws DcerpcException, IOException {
-synchronized (this) {
-        try {
-            state = 1;
-            DcerpcMessage bind = new DcerpcBind(binding, this);
-            sendrecv(bind);
-        } catch (IOException ioe) {
-            state = 0;
-            throw ioe;
+        synchronized (this) {
+            try {
+                state = 1;
+                DcerpcMessage bind = new DcerpcBind(binding, this);
+                sendrecv(bind);
+            } catch (IOException ioe) {
+                state = 0;
+                throw ioe;
+            }
         }
-}
     }
     public void sendrecv(DcerpcMessage msg) throws DcerpcException, IOException {
         byte[] stub, frag;
@@ -268,9 +268,9 @@ synchronized (this) {
     }
 
     protected abstract void doSendFragment(byte[] buf,
-                int off,
-                int length,
-                boolean isDirect) throws IOException;
+            int off,
+            int length,
+            boolean isDirect) throws IOException;
     protected abstract void doReceiveFragment(byte[] buf, boolean isDirect) throws IOException;
     public abstract void close() throws IOException;
 }

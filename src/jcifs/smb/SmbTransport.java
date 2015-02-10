@@ -188,7 +188,7 @@ public class SmbTransport extends Transport implements SmbConstants {
         return ( flags2 & ServerMessageBlock.FLAGS2_SECURITY_SIGNATURES ) != 0 &&
                 digest == null &&
                 auth != NtlmPasswordAuthentication.NULL &&
-                NtlmPasswordAuthentication.NULL.equals( auth ) == false;
+                !NtlmPasswordAuthentication.NULL.equals(auth);
     }
 
     void ssn139() throws IOException {

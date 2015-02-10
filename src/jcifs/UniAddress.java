@@ -18,15 +18,15 @@
 
 package jcifs;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.StringTokenizer;
-
-import org.apache.log4j.Logger;
-
-import jcifs.netbios.NbtAddress;
 import jcifs.netbios.Lmhosts;
+import jcifs.netbios.NbtAddress;
+import org.apache.log4j.Logger;
 
 /**
  * <p>Under normal conditions it is not necessary to use
@@ -55,6 +55,15 @@ public class UniAddress {
     private static final int RESOLVER_BCAST   = 1;
     private static final int RESOLVER_DNS     = 2;
     private static final int RESOLVER_LMHOSTS = 3;
+
+    private static final Map resolveOrderNameMap = new HashMap();
+
+    static {
+        resolveOrderNameMap.put(Integer.valueOf(RESOLVER_LMHOSTS), "LMHOSTS");
+        resolveOrderNameMap.put(Integer.valueOf(RESOLVER_BCAST), "BCAST");
+        resolveOrderNameMap.put(Integer.valueOf(RESOLVER_DNS), "DNS");
+        resolveOrderNameMap.put(Integer.valueOf(RESOLVER_WINS), "WINS");
+    }
 
     private static int[] resolveOrder;
     private static InetAddress baddr;
@@ -270,7 +279,7 @@ public class UniAddress {
                         }
                         break;
                     case RESOLVER_WINS:
-                        if( hostname == NbtAddress.MASTER_BROWSER_NAME ||
+                        if(NbtAddress.MASTER_BROWSER_NAME.equals(hostname) ||
                                                     hostname.length() > 15 ) {
                                                     // invalid netbios name
                             continue;
@@ -300,6 +309,9 @@ public class UniAddress {
                         UniAddress[] addrs = new UniAddress[iaddrs.length];
                         for (int ii = 0; ii < iaddrs.length; ii++) {
                             addrs[ii] = new UniAddress(iaddrs[ii]);
+                            LOGGER.debug("Name resolution succeeded: method="
+                                    + resolveOrderNameMap.get(Integer.valueOf(i))
+                                    + ", hostname=" + hostname + ", ip[" + ii + "]=" + addrs[ii]);
                         }
                         return addrs; // Success
                     default:
@@ -307,9 +319,15 @@ public class UniAddress {
                 }
                 UniAddress[] addrs = new UniAddress[1];
                 addrs[0] = new UniAddress( addr );
+                LOGGER.debug("Name resolution succeeded: method="
+                        + resolveOrderNameMap.get(Integer.valueOf(i))
+                        + ", hostname=" + hostname + ", ip=" + addr);
                 return addrs; // Success
             } catch( IOException ioe ) {
                 // Failure
+                LOGGER.debug("Name resolution failed: method="
+                        + resolveOrderNameMap.get(Integer.valueOf(i))
+                        + ", hostname=" + hostname);
             }
         }
         throw new UnknownHostException( hostname );
@@ -422,7 +440,7 @@ import javax.naming.directory.*;
     public String nextCalledName() {
         if( addr instanceof NbtAddress ) {
             return ((NbtAddress)addr).nextCalledName();
-        } else if( calledName != NbtAddress.SMBSERVER_NAME ) {
+        } else if(!NbtAddress.SMBSERVER_NAME.equals(calledName)) {
             calledName = NbtAddress.SMBSERVER_NAME;
             return calledName;
         }

@@ -55,7 +55,7 @@ public final class SmbSession {
             trans.connect();
             LOGGER.warn(
                     "Default credentials (jcifs.smb.client.username/password)" +
-                            " not specified. SMB signing may not work propertly." +
+                            " not specified. SMB signing may not work properly." +
                             "  Skipping DC interrogation." );
         } else {
             SmbSession ssn = trans.getSmbSession( NtlmPasswordAuthentication.DEFAULT );
