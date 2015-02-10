@@ -322,17 +322,9 @@ public class SmbTransport extends Transport implements SmbConstants {
          */
 
         SmbComNegotiateResponse resp = new SmbComNegotiateResponse( server );
-
-        if (NbtAddress.localhostSet) {
-            port = 139;
-        }
-
         try {
             negotiate( port, resp );
         } catch( ConnectException ce ) {
-            if (NbtAddress.localhostSet)
-                throw ce;
-
             port = (port == 0 || port == DEFAULT_PORT) ? 139 : DEFAULT_PORT;
             negotiate( port, resp );
         } catch( NoRouteToHostException nr ) {
