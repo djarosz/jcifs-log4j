@@ -9,6 +9,9 @@ interface SmbConstants {
 
     static final int DEFAULT_PORT = 445;
 
+    static final int DEFAULT_LOGON_PORT = Config.getInt("jcifs.smb.client.defaultLogonPort",
+            SmbConstants.NETBIOS_HOSTNAME == null ? 0 : 139);
+
     static final int DEFAULT_MAX_MPX_COUNT = 10;
     static final int DEFAULT_RESPONSE_TIMEOUT = 30000;
     static final int DEFAULT_SO_TIMEOUT = 35000;

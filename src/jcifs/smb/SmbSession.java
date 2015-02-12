@@ -133,7 +133,7 @@ public final class SmbSession {
      */
     public static void logon( UniAddress dc,
                               NtlmPasswordAuthentication auth ) throws SmbException {
-        logon(dc, 0, auth);
+        logon(dc, SmbConstants.DEFAULT_LOGON_PORT, auth);
     }
 
     public static void logon( UniAddress dc, int port,
